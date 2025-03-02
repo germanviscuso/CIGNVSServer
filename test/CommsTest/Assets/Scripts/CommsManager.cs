@@ -6,7 +6,7 @@ using UnityEngine;
 using NativeWebSocket;
 using Newtonsoft.Json;
 
-public class DhCommsManager : MonoBehaviour
+public class CommsManager : MonoBehaviour
 {
     public string serverUrl = "ws://192.168.50.30:3000"; // URL del servidor WebSocket
     private WebSocket websocket;
