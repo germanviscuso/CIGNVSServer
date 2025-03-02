@@ -7,7 +7,7 @@ Servidor de soporte del proyecto Dharana
 
 ## Uso
 - Poner las gafas y el ordenador que correo el servidor en la misma Wifi
-- En el directorio raiz hacer: `node server.js` (copiar IP)
+- En el directorio raiz hacer: `npm install && npm start` (copiar IP)
 - Abrir proyecto de Unity, cliquear en la esfera y actualizar la IP en el ultimo script asociado
 - Deployar app en las gafas (Build and Run)
 - Coger la esfera (grab) y ver mensajes en el servidor

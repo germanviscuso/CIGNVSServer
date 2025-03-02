@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket MQTT Client</title>
+</head>
+<body>
+    <h1>WebSocket to MQTT Client</h1>
+    <input type="text" id="channel" placeholder="Enter Channel">
+    <input type="text" id="message" placeholder="Enter Message">
+    <button onclick="sendMessage()">Send Message</button>
+    <h2>Logs:</h2>
+    <div id="logs"></div>
+
+    <script>
+        const serverUrl = "ws://192.168.50.30:3000"; // Cambia por la IP del servidor
+        const ws = new WebSocket(serverUrl);
+
+        ws.onopen = () => {
+            logMessage("✅ Connected to WebSocket Server");
+        };
+
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            logMessage(`📩 Received from [${data.channel}]: ${data.message}`);
+        };
+
+        ws.onclose = () => {
+            logMessage("❌ Disconnected from WebSocket Server");
+        };
+
+        function sendMessage() {
+            const channel = document.getElementById("channel").value;
+            const message = document.getElementById("message").value;
+
+            const payload = JSON.stringify({
+                channel: channel,
+                message: message,
+                needsAck: true
+            });
+
+            ws.send(payload);
+            logMessage(`📤 Sent to [${channel}]: ${message}`);
+        }
+
+        function logMessage(msg) {
+            const logDiv = document.getElementById("logs");
+            logDiv.innerHTML += `<p>${msg}</p>`;
+        }
+    </script>
+</body>
+</html>
