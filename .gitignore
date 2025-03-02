@@ -207,3 +207,5 @@ crashlytics-build.properties
 
 test/CommsTest/Library
 test/CommsTest/Temp
+
+.DS_Store

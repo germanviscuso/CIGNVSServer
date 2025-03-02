@@ -15,14 +15,17 @@ function getLocalIP() {
 }
 
 const localIP = getLocalIP();
-const port = 3000;
+const wsport = 3000;
+const mqttport = 1883;
 
-const wss = new WebSocket.Server({ port });
-const mqttClient = mqtt.connect("mqtt://localhost:1883"); // Cambia si usas un broker externo
+const wss = new WebSocket.Server({ port: wsport });
+const mqttClient = mqtt.connect("mqtt://localhost:"+mqttport); // Cambia si usas un broker externo
 
 console.log("🚀 Dharana server running on:");
-console.log(`   🌍 Local:   ws://localhost:${port}`);
-console.log(`   📡 Network: ws://${localIP}:${port}  <-- COPY THIS TO UNITY`);
+console.log(`   🌍 Local:   ws://localhost:${wsport}`);
+console.log(`   🌍 Local:   mqtt://localhost:${mqttport}`);
+console.log(`   📡 Network: ws://${localIP}:${wsport}  <-- COPY THIS TO UNITY`);
+console.log(`   📡 Network: mqtt://${localIP}:${mqttport}`);
 
 wss.on("connection", (ws) => {
   console.log("⚡ A client connected");
@@ -35,6 +38,12 @@ wss.on("connection", (ws) => {
       const needsAck = parsedMessage.needsAck;
 
       console.log(`📩 Message on [${channel}]: ${textMessage}`);
+
+      // Si el mensaje es un log, mostrarlo en consola
+      if (channel === "debug/logs") {
+        console.log(`🐛 [UNITY DEBUG]: ${textMessage}`);
+        return;
+      }
 
       // Publicar mensaje en MQTT
       mqttClient.publish(channel, textMessage);

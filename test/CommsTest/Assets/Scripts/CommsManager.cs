@@ -30,6 +30,7 @@ public class DhCommsManager : MonoBehaviour
 
         websocket.OnOpen += () =>
         {
+            RemoteLogHandler.Initialize(websocket); // 🔥 Activa el interceptor de Debug.Log
             Debug.Log("✅ WebSocket Connected!");
             isConnected = true;
         };
