@@ -21,7 +21,7 @@ const mqttport = 1883;
 const wss = new WebSocket.Server({ port: wsport });
 const mqttClient = mqtt.connect("mqtt://localhost:"+mqttport); // Cambia si usas un broker externo
 
-console.log("🚀 Dharana server running on:");
+console.log("🚀 CignvsLab server running on:");
 console.log(`   🌍 Local:   ws://localhost:${wsport}`);
 console.log(`   🌍 Local:   mqtt://localhost:${mqttport}`);
 console.log(`   📡 Network: ws://${localIP}:${wsport}  <-- COPY THIS TO UNITY`);
