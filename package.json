@@ -1,15 +1,29 @@
 {
-  "name": "dharana-server",
+  "name": "org.cignvslab",
   "version": "1.0.0",
-  "description": "Servidor WebSocket + MQTT para comunicación con Unity y navegadores",
-  "main": "server.js",
-  "scripts": {
-    "start": "node server.js"
+  "displayName": "CignvsLab Core Package",
+  "description": "Core Unity package for CignvsLab research projects.",
+  "unity": "6000.0",
+  "author": {
+    "name": "CignvsLab",
+    "email": "cignvslab@u-tad.com",
+    "url": "https://github.com/germanviscuso/DharanaServer"
   },
-  "dependencies": {
-    "ws": "^8.15.0",
-    "mqtt": "^5.0.0"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/germanviscuso/DharanaServer"
   },
-  "author": "Tu Nombre",
-  "license": "ISC"
+  "samples": [
+    {
+      "displayName": "CommsManager Prefab",
+      "description": "A prefab containing the CommsManager component providing websockets communication.",
+      "path": "Samples~/Prefabs"
+    }
+    {
+      "displayName": "Node.js server",
+      "description": "A node.js server to serve as communications server for CommsManager.",
+      "path": "Samples~/Server"
+    }
+  ]
 }
