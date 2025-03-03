@@ -66,6 +66,11 @@ namespace CignvsLab
     #endif
         }
 
+        bool IsConnected()
+        {
+            return isConnected;
+        }
+
         private async void RetryConnection()
         {
             Debug.Log("🔄 Retrying WebSocket connection...");
