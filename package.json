@@ -14,7 +14,6 @@
     "type": "git",
     "url": "https://github.com/germanviscuso/DharanaServer"
   },
-  "hideInEditor": false,
   "samples": [
     {
       "displayName": "CommsManager Prefab",
@@ -26,5 +25,9 @@
       "description": "A node.js server to serve as communications server for CommsManager.",
       "path": "Samples~/Server"
     }
-  ]
+  ],
+  "dependencies": {
+    "com.endel.nativewebsocket": "1.1.5",
+    "jillejr.newtonsoft.json-for-unity": "10.0.302"
+  }
 }
