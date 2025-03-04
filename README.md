@@ -1,6 +1,6 @@
-# Cignvs Lab Core unity Package
+# Cignvs Lab Core Unity Package
 
-A set of tools for Cignvs Lab projects in Unity including a communications server.
+A set of tools for Cignvs Lab projects interfacing with Unity including a communications server.
 
 ## Importing to Unity
 Add package in Unity package manager via git url:
