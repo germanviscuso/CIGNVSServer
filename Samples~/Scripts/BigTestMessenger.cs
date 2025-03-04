@@ -46,7 +46,7 @@ namespace CignvsLab
 
             var largePayload = new
             {
-                message = new string('A', 10000) // 10,000 characters (~10 KB)
+                message = new string('A', 5000) // (~5 KB of As)
             };
 
             string jsonMessage = JsonConvert.SerializeObject(largePayload);
