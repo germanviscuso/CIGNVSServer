@@ -22,12 +22,12 @@
       "path": "Samples~/Prefabs"
     },
     {
-      "displayName": "Useful scripts",
+      "displayName": "Scripts",
       "description": "Scripts for use in objects that want to commuicate with the server.",
       "path": "Samples~/Scripts"
     },
     {
-      "displayName": "Node.js server",
+      "displayName": "Server",
       "description": "A node.js server to serve as communications server for Unity.",
       "path": "Samples~/Server"
     }
