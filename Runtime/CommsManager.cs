@@ -1,20 +1,25 @@
+using System;
+using System.Collections.Generic;
+using System.Text;
+using System.Threading.Tasks;
+using UnityEngine;
+using NativeWebSocket;
+using Newtonsoft.Json;
+
 namespace CignvsLab
 {
-    using System;
-    using System.Collections.Generic;
-    using System.Text;
-    using System.Threading.Tasks;
-    using UnityEngine;
-    using NativeWebSocket;
-    using Newtonsoft.Json;
-
     public class CommsManager : MonoBehaviour
     {
-        public string serverUrl = "ws://192.168.50.30:3000"; // URL del servidor WebSocket
+        public string serverUrl = "ws://192.168.50.30:3000"; 
+        
+        [Tooltip("Enable or disable remote logging.")]
+        public bool enableLogging = true;
+
+        [Tooltip("Enable extended logs (includes stack trace).")]
+        public bool extendedLogs = false;
+        
         private WebSocket websocket;
         private Dictionary<string, Action<string>> channelSubscriptions = new Dictionary<string, Action<string>>();
-        private bool isConnected = false;
-        private float reconnectInterval = 5f; // Tiempo entre reintentos de conexión
 
         async void Start()
         {
@@ -32,29 +37,18 @@ namespace CignvsLab
 
             websocket.OnOpen += () =>
             {
-                RemoteLogHandler.Initialize(websocket); // 🔥 Activa el interceptor de Debug.Log
+                RemoteLogHandler.Initialize(websocket, enableLogging, extendedLogs);
                 Debug.Log("✅ WebSocket Connected!");
-                isConnected = true;
-            };
-
-            websocket.OnError += (e) =>
-            {
-                Debug.LogError("🚨 WebSocket Error: " + e);
-            };
-
-            websocket.OnClose += (e) =>
-            {
-                Debug.LogWarning("❌ WebSocket Disconnected. Retrying in " + reconnectInterval + " seconds...");
-                isConnected = false;
-                Invoke(nameof(RetryConnection), reconnectInterval);
             };
 
             websocket.OnMessage += (bytes) =>
             {
                 string message = Encoding.UTF8.GetString(bytes);
-                Debug.Log($"📩 Message from Server: {message}");
                 HandleIncomingMessage(message);
             };
+
+            websocket.OnError += (e) => { Debug.LogError("🚨 WebSocket Error: " + e); };
+            websocket.OnClose += (e) => { Debug.LogWarning("❌ WebSocket Disconnected."); };
 
             await websocket.Connect();
         }
@@ -66,34 +60,49 @@ namespace CignvsLab
     #endif
         }
 
-        bool IsConnected()
-        {
-            return isConnected;
-        }
-
-        private async void RetryConnection()
-        {
-            Debug.Log("🔄 Retrying WebSocket connection...");
-            await ConnectToServer();
-        }
-
-        public async void SendMessageToServer(string channel, string message, bool needsAck = false)
+        public async void SubscribeToMQTTChannel(string channel)
         {
             if (websocket.State == WebSocketState.Open)
             {
                 var jsonMessage = JsonConvert.SerializeObject(new
                 {
-                    channel = channel,
-                    message = message,
-                    needsAck = needsAck
+                    command = "subscribe",
+                    channel = channel
                 });
 
                 await websocket.SendText(jsonMessage);
-                Debug.Log($"📤 Sent: {jsonMessage}");
+                Debug.Log($"🔗 Subscribed to: {channel}");
             }
-            else
+        }
+
+        public async void UnsubscribeFromMQTTChannel(string channel)
+        {
+            if (websocket.State == WebSocketState.Open)
             {
-                Debug.LogWarning("⚠️ WebSocket is not connected. Message not sent.");
+                var jsonMessage = JsonConvert.SerializeObject(new
+                {
+                    command = "unsubscribe",
+                    channel = channel
+                });
+
+                await websocket.SendText(jsonMessage);
+                Debug.Log($"❌ Unsubscribed from: {channel}");
+            }
+        }
+
+        public async void PublishToMQTT(string channel, string message)
+        {
+            if (websocket.State == WebSocketState.Open)
+            {
+                var jsonMessage = JsonConvert.SerializeObject(new
+                {
+                    command = "publish",
+                    channel = channel,
+                    message = message
+                });
+
+                await websocket.SendText(jsonMessage);
+                Debug.Log($"📤 Published to {channel}: {message}");
             }
         }
 
@@ -113,7 +122,7 @@ namespace CignvsLab
                     }
                     else
                     {
-                        Debug.Log($"🔍 No handler for channel: {channel}");
+                        Debug.Log($"🔍 No handler for MQTT channel: {channel}");
                     }
                 }
             }
@@ -128,12 +137,17 @@ namespace CignvsLab
             if (!channelSubscriptions.ContainsKey(channel))
             {
                 channelSubscriptions[channel] = callback;
+                SubscribeToMQTTChannel(channel);
             }
         }
 
-        private async void OnApplicationQuit()
+        public void UnsubscribeFromChannel(string channel)
         {
-            await websocket.Close();
+            if (channelSubscriptions.ContainsKey(channel))
+            {
+                channelSubscriptions.Remove(channel);
+                UnsubscribeFromMQTTChannel(channel);
+            }
         }
     }
 }

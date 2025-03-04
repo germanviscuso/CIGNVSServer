@@ -19,7 +19,7 @@ const wsport = 3000;
 const mqttport = 1883;
 
 const wss = new WebSocket.Server({ port: wsport });
-const mqttClient = mqtt.connect("mqtt://localhost:"+mqttport); // Cambia si usas un broker externo
+const mqttClient = mqtt.connect("mqtt://localhost:" + mqttport);
 
 console.log("🚀 CignvsLab server running on:");
 console.log(`   🌍 Local:   ws://localhost:${wsport}`);
@@ -27,34 +27,62 @@ console.log(`   🌍 Local:   mqtt://localhost:${mqttport}`);
 console.log(`   📡 Network: ws://${localIP}:${wsport}  <-- COPY THIS TO UNITY`);
 console.log(`   📡 Network: mqtt://${localIP}:${mqttport}`);
 
+const clientSubscriptions = new Map();
+
 wss.on("connection", (ws) => {
   console.log("⚡ A client connected");
+
+  clientSubscriptions.set(ws, new Set());
 
   ws.on("message", (message) => {
     try {
       const parsedMessage = JSON.parse(message);
+      const command = parsedMessage.command;
       const channel = parsedMessage.channel;
       const textMessage = parsedMessage.message;
-      const needsAck = parsedMessage.needsAck;
+      const timestamp = parsedMessage.timestamp;
+      const stackTrace = parsedMessage.stackTrace;
 
-      console.log(`📩 Message on [${channel}]: ${textMessage}`);
+      if (command === "subscribe") {
+        console.log(`🔗 Unity requested subscription to [${channel}]`);
+        clientSubscriptions.get(ws).add(channel);
+        mqttClient.subscribe(channel);
+      } 
+      else if (command === "unsubscribe") {
+        console.log(`🔗 Unity requested to unsubscribe from [${channel}]`);
+        clientSubscriptions.get(ws).delete(channel);
+        
+        // Check if no WebSocket clients are subscribed before unsubscribing from MQTT
+        const isTopicStillUsed = Array.from(clientSubscriptions.values()).some(subs => subs.has(channel));
+        if (!isTopicStillUsed) {
+          mqttClient.unsubscribe(channel);
+        }
+      } 
+      else if (command === "publish") {
+        console.log(`📤 Publishing to MQTT: [${channel}] → ${textMessage}`);
+        mqttClient.publish(channel, textMessage);
+      } 
+      else if (command === "debug_log") {
+        const logTopic = channel || "debug/logs"; // Default to "debug/logs" if no channel is provided
+        
+        // 🔥 Print full log details
+        if(timestamp){
+          console.log(`🐛 [${logTopic}] @ ${timestamp}: ${textMessage}`);
+        } else {
+          console.log(`🐛 [${logTopic}]: ${textMessage}`);
+        }
+        if (stackTrace) {
+          console.log(`🔍 Stack Trace:\n${stackTrace}`);
+        }
 
-      // Si el mensaje es un log, mostrarlo en consola
-      if (channel === "debug/logs") {
-        console.log(`🐛 [UNITY DEBUG]: ${textMessage}`);
-        return;
+        // 🔥 Publish full log to MQTT
+        mqttClient.publish(logTopic, JSON.stringify({
+          message: textMessage,
+          timestamp: timestamp,
+          stackTrace: stackTrace
+        }));
       }
 
-      // Publicar mensaje en MQTT
-      mqttClient.publish(channel, textMessage);
-
-      // Si se necesita ACK
-      if (needsAck) {
-        setTimeout(() => {
-          ws.send(JSON.stringify({ channel: "ack", message: `✅ Received on [${channel}]` }));
-          console.log("📡 Sent acknowledgment to client");
-        }, 2000);
-      }
     } catch (error) {
       console.error("❌ Error parsing message:", error);
     }
@@ -62,18 +90,17 @@ wss.on("connection", (ws) => {
 
   ws.on("close", () => {
     console.log("❌ Client disconnected");
+    clientSubscriptions.delete(ws);
   });
 });
 
-// Escuchar mensajes MQTT y enviarlos a clientes WebSocket
+// 🔥 Forward MQTT Messages to Subscribed WebSocket Clients
 mqttClient.on("message", (topic, message) => {
   console.log(`📡 MQTT Message on [${topic}]: ${message.toString()}`);
+
   wss.clients.forEach(client => {
-    if (client.readyState === WebSocket.OPEN) {
+    if (client.readyState === WebSocket.OPEN && clientSubscriptions.get(client)?.has(topic)) {
       client.send(JSON.stringify({ channel: topic, message: message.toString() }));
     }
   });
 });
-
-// Suscribirse a todos los mensajes MQTT
-mqttClient.subscribe("#");
