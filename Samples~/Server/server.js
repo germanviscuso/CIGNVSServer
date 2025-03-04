@@ -14,6 +14,22 @@ function getLocalIP() {
   return "localhost";
 }
 
+function truncateMessage(message, maxLength = 2048) {
+  const truncatedIndicator = " ...[truncated]";
+
+  // Ensure the input is a string
+  if (typeof message !== "string") {
+      message = JSON.stringify(message); // Convert objects to JSON string
+  }
+
+  if (!message || message.length <= maxLength) {
+      return message;
+  }
+
+  const maxContentLength = maxLength - truncatedIndicator.length; // Ensure space for indicator
+  return message.substring(0, maxContentLength) + truncatedIndicator;
+}
+
 const verbose = false;
 const localIP = getLocalIP();
 const wsport = 3000;
@@ -36,7 +52,7 @@ console.log(`   📡 Network: mqtt://${localIP}:${mqttport}`);
 const clientSubscriptions = new Map();
 
 wss.on("connection", (ws) => {
-  console.log("⚡ A client connected");
+  console.log("⚡ [server] A client connected");
 
   if (!clientSubscriptions.has(ws)) {
     clientSubscriptions.set(ws, new Set());
@@ -58,18 +74,6 @@ wss.on("connection", (ws) => {
         mqttMessage = JSON.stringify(mqttMessage);
       }
 
-      // if (command === "subscribe") {
-      //   console.log(`🔗 Unity requested subscription to [${channel}]`);
-      //   clientSubscriptions.get(ws).add(channel);
-    
-      //   mqttClient.subscribe(channel, (err, granted) => {
-      //       if (err) {
-      //           console.error(`❌ Failed to subscribe to [${channel}]:`, err);
-      //       } else {
-      //           console.log(`✅ Successfully subscribed to: ${granted.map(g => g.topic).join(", ")}`);
-      //       }
-      //   });
-      // }
       if (command === "subscribe") {
           if (!clientSubscriptions.get(ws).has(channel)) {
               console.log(`🔗 [server] Unity requested subscription to [${channel}]`);
@@ -86,7 +90,7 @@ wss.on("connection", (ws) => {
           }
       } 
       else if (command === "publish") {
-          console.log(`📤 [server] Publishing to MQTT: [${channel}] → ${mqttMessage}`);
+          console.log(`📤 [server] Publishing to MQTT: [${channel}] → ${truncateMessage(mqttMessage)}`);
           mqttClient.publish(channel, mqttMessage);
       } 
       else if (command === "unsubscribe") {
@@ -99,30 +103,6 @@ wss.on("connection", (ws) => {
           mqttClient.unsubscribe(channel);
         }
       } 
-      else if (command === "publish") {
-        console.log(`📤 [server] Publishing to MQTT: [${channel}] → ${mqttMessage}`);
-        mqttClient.publish(channel, mqttMessage);
-      } 
-      // else if (command === "debug_log") {
-      //   const logTopic = channel || "debug/logs"; // Defaults to "debug/logs" if no channel is provided
-        
-      //   // 🔥 Print full log details
-      //   if(timestamp){
-      //     console.log(`🐛 [${logTopic}] @ ${timestamp}: ${mqttMessage}`);
-      //   } else {
-      //     console.log(`🐛 [${logTopic}]: ${mqttMessage}`);
-      //   }
-      //   if (stackTrace) {
-      //     console.log(`🔍 Stack Trace:\n${stackTrace}`);
-      //   }
-
-      //   // 🔥 Publish full log to MQTT
-      //   mqttClient.publish(logTopic, JSON.stringify({
-      //     message: mqttMessage,
-      //     timestamp: timestamp,
-      //     stackTrace: stackTrace
-      //   }));
-      // }
       else if (command === "debug_log") {
           const logTopic = channel || "debug/logs"; // Defaults to "debug/logs" if no channel is provided
       
@@ -139,9 +119,9 @@ wss.on("connection", (ws) => {
           logMessage.stackTrace = stackTrace || null;
       
           // 🔥 Print full log details to console
-          console.log(`🐛 [${logTopic}] @ ${logMessage.timestamp}: ${logMessage.message}`);
+          console.log(`🐛 [${logTopic}] @ ${logMessage.timestamp}: ${truncateMessage(logMessage.message)}`);
           if (logMessage.stackTrace) {
-              console.log(`🔍 Stack Trace:\n${logMessage.stackTrace}`);
+              console.log(`🔍 Stack Trace:\n${truncateMessage(logMessage.stackTrace)}`);
           }
       
           // 🔥 Publish full log to MQTT as proper JSON
@@ -172,14 +152,15 @@ mqttClient.on("close", () => {
 
 // 🔥 Forward MQTT Messages to Subscribed WebSocket Clients
 mqttClient.on("message", (topic, message) => {
-  console.log(`📡 [server] Received MQTT Message on [${topic}]: ${message.toString()}`);
+  console.log(`📡 [server] Received MQTT Message on [${topic}]: ${truncateMessage(message.toString())}`);
 
   wss.clients.forEach(client => {
       if (client.readyState === WebSocket.OPEN && clientSubscriptions.get(client)?.has(topic)) {
-          console.log(`📡 [server] Forwarding MQTT → WebSocket: ${topic} → ${message}`);
+          console.log(`📡 [server] Forwarding MQTT → WebSocket: ${topic} → ${message.length} bytes`);
           client.send(JSON.stringify({ channel: topic, message: message.toString() }));
       } else {
           console.log(`⚠️ [server] No WebSocket clients subscribed to [${topic}]`);
       }
   });
 });
+

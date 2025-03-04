@@ -67,7 +67,7 @@ namespace CignvsLab
 
         public async void SubscribeToMQTTChannel(string channel)
         {
-            Debug.Log($"🔗 Attempting to subscribe to: {channel}");
+            //Debug.Log($"🔗 Attempting to subscribe to: {channel}");
 
             if (websocket == null)
             {
