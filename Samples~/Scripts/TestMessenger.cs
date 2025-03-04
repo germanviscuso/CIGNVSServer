@@ -35,7 +35,7 @@ namespace CignvsLab
                 yield return new WaitForSeconds(1f);
             }
 
-            Debug.Log($"✅ WebSocket is connected! Subscribing to MQTT topic: {testTopic}");
+            Debug.Log($"✅ Subscribing to MQTT topic: {testTopic}");
             commsManager.SubscribeToChannel(testTopic, OnMessageReceived);
         }
 
