@@ -19,6 +19,29 @@ Servidor de soporte de proyectos de Cignvs Lab
 - Luego en cualquier objeto se puede hacer:
 -- TODO
 
+## Comando de mosquitto utiles (CLI)
+- Instalar mosquitto (brew, Mac)
+-- brew install mosquitto
+- Correr mosquitto (brew, Mac)
+-- brew services <start|stop|restart|status> mosquitto
+- Config (brew, Mac)
+-- /opt/homebrew/etc/mosquitto/mosquitto.conf
+- Binario (brew, Mac)
+-- /opt/homebrew/opt/mosquitto/sbin/mosquitto
+- Publicar en un topic
+-- mosquitto_pub -h localhost -t test/topic -m "Hello from CLI"
+- Subscribir a y monitorear un topic
+-- mosquitto_sub -h localhost -t test/topic -v
+- Eliminar mensajes retenidos de un topic
+-- mosquitto_pub -h localhost -t test/topic -m "" -r
+- Desubscribir subscriptores a un topic
+-- mosquitto_pub -h localhost -t "test/topic" -r -n
+-- mosquitto_pub -h localhost -t "debug/logs" -r -n
+- Verificar topics acticos/con subscriptores
+-- mosquitto_sub -h localhost -t "#" -v
+- Desconectar a todos los clientes
+-- mosquitto_ctrl -h localhost disconnect all
+
 ## Ventajas
 - Permite hacer DEBUG remoto de lo que sucede en las gafas (Debug.Log también se direcciona al servidor)
 

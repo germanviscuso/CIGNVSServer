@@ -93,6 +93,47 @@ namespace CignvsLab
             Debug.Log($"✅ Successfully subscribed to: {channel}");
         }
 
+        // public async void SubscribeToMQTTChannel(string channel)
+        // {
+        //     Debug.Log($"🔗 Attempting to subscribe to: {channel}");
+
+        //     if (websocket == null)
+        //     {
+        //         Debug.LogError("❌ WebSocket is NULL inside SubscribeToMQTTChannel!");
+        //         return;
+        //     }
+
+        //     Debug.Log($"✅ WebSocket object exists, state = {websocket.State}");
+
+        //     if (websocket.State != WebSocketState.Open)
+        //     {
+        //         Debug.LogWarning("⚠️ WebSocket is not OPEN, cannot subscribe yet.");
+        //         return;
+        //     }
+
+        //     // ✅ Check if we're already subscribed to avoid duplicates
+        //     if (channelSubscriptions.ContainsKey(channel))
+        //     {
+        //         Debug.LogWarning($"⚠️ Already subscribed to {channel}, skipping duplicate subscription.");
+        //         return;
+        //     }
+
+        //     var jsonMessage = JsonConvert.SerializeObject(new
+        //     {
+        //         command = "subscribe",
+        //         channel = channel
+        //     });
+
+        //     await websocket.SendText(jsonMessage);
+        //     Debug.Log($"✅ Successfully subscribed to: {channel}");
+
+        //     // ✅ Store subscription callback in dictionary
+        //     channelSubscriptions[channel] = (message) =>
+        //     {
+        //         Debug.Log($"📩 Received MQTT message on {channel}: {message}");
+        //     };
+        // }
+
         public async void UnsubscribeFromMQTTChannel(string channel)
         {
             if (websocket.State == WebSocketState.Open)
@@ -108,7 +149,23 @@ namespace CignvsLab
             }
         }
 
-        public async void PublishToMQTT(string channel, string message)
+        // public async void PublishToMQTT(string channel, string message)
+        // {
+        //     if (websocket.State == WebSocketState.Open)
+        //     {
+        //         var jsonMessage = JsonConvert.SerializeObject(new
+        //         {
+        //             command = "publish",
+        //             channel = channel,
+        //             message = message
+        //         });
+
+        //         await websocket.SendText(jsonMessage);
+        //         Debug.Log($"📤 Published to {channel}: {message}");
+        //     }
+        // }
+
+        public async void PublishToMQTT(string channel, object message)
         {
             if (websocket.State == WebSocketState.Open)
             {
@@ -120,7 +177,7 @@ namespace CignvsLab
                 });
 
                 await websocket.SendText(jsonMessage);
-                Debug.Log($"📤 Published to {channel}: {message}");
+                Debug.Log($"📤 Published to {channel}: {JsonConvert.SerializeObject(message)}");
             }
         }
 

@@ -14,6 +14,7 @@ function getLocalIP() {
   return "localhost";
 }
 
+const verbose = false;
 const localIP = getLocalIP();
 const wsport = 3000;
 const mqttport = 1883;
@@ -41,12 +42,19 @@ wss.on("connection", (ws) => {
 
   ws.on("message", (message) => {
     try {
+      if (verbose) console.log(`📩 Received WebSocket message of size: ${Buffer.byteLength(message, 'utf8')} bytes`);
+
       const parsedMessage = JSON.parse(message);
       const command = parsedMessage.command;
       const channel = parsedMessage.channel;
-      const textMessage = parsedMessage.message;
+      const mqttMessage = parsedMessage.message;
       const timestamp = parsedMessage.timestamp;
       const stackTrace = parsedMessage.stackTrace;
+
+      // 🛠 Detect if message is already an object and convert if necessary
+      if (typeof mqttMessage === "object") {
+        mqttMessage = JSON.stringify(mqttMessage);
+      }
 
       if (command === "subscribe") {
         console.log(`🔗 Unity requested subscription to [${channel}]`);
@@ -71,32 +79,55 @@ wss.on("connection", (ws) => {
         }
       } 
       else if (command === "publish") {
-        console.log(`📤 Publishing to MQTT: [${channel}] → ${textMessage}`);
-        mqttClient.publish(channel, textMessage);
+        console.log(`📤 Publishing to MQTT: [${channel}] → ${mqttMessage}`);
+        mqttClient.publish(channel, mqttMessage);
       } 
-      else if (command === "debug_log") {
-        const logTopic = channel || "debug/logs"; // Default to "debug/logs" if no channel is provided
+      // else if (command === "debug_log") {
+      //   const logTopic = channel || "debug/logs"; // Defaults to "debug/logs" if no channel is provided
         
-        // 🔥 Print full log details
-        if(timestamp){
-          console.log(`🐛 [${logTopic}] @ ${timestamp}: ${textMessage}`);
-        } else {
-          console.log(`🐛 [${logTopic}]: ${textMessage}`);
-        }
-        if (stackTrace) {
-          console.log(`🔍 Stack Trace:\n${stackTrace}`);
-        }
+      //   // 🔥 Print full log details
+      //   if(timestamp){
+      //     console.log(`🐛 [${logTopic}] @ ${timestamp}: ${mqttMessage}`);
+      //   } else {
+      //     console.log(`🐛 [${logTopic}]: ${mqttMessage}`);
+      //   }
+      //   if (stackTrace) {
+      //     console.log(`🔍 Stack Trace:\n${stackTrace}`);
+      //   }
 
-        // 🔥 Publish full log to MQTT
-        mqttClient.publish(logTopic, JSON.stringify({
-          message: textMessage,
-          timestamp: timestamp,
-          stackTrace: stackTrace
-        }));
-      }
-
+      //   // 🔥 Publish full log to MQTT
+      //   mqttClient.publish(logTopic, JSON.stringify({
+      //     message: mqttMessage,
+      //     timestamp: timestamp,
+      //     stackTrace: stackTrace
+      //   }));
+      // }
+      else if (command === "debug_log") {
+          const logTopic = channel || "debug/logs"; // Defaults to "debug/logs" if no channel is provided
+      
+          // 🛠 Attempt to parse `mqttMessage` (it is always a string at this point)
+          let logMessage;
+          try {
+              logMessage = JSON.parse(mqttMessage); // Convert to object
+          } catch (e) {
+              logMessage = { message: mqttMessage }; // Keep as raw text if JSON parsing fails
+          }
+      
+          // ✅ Ensure timestamp and stack trace exist in log object
+          logMessage.timestamp = timestamp || new Date().toISOString();
+          logMessage.stackTrace = stackTrace || null;
+      
+          // 🔥 Print full log details to console
+          console.log(`🐛 [${logTopic}] @ ${logMessage.timestamp}: ${logMessage.message}`);
+          if (logMessage.stackTrace) {
+              console.log(`🔍 Stack Trace:\n${logMessage.stackTrace}`);
+          }
+      
+          // 🔥 Publish full log to MQTT as proper JSON
+          mqttClient.publish(logTopic, JSON.stringify(logMessage));
+      }    
     } catch (error) {
-      console.error("❌ Error parsing message:", error);
+      console.error("❌ Error parsing WebSocket message:", error);
     }
   });
 
