@@ -1,6 +1,6 @@
 {
   "name": "org.cignvslab",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "displayName": "CignvsLab Core Package",
   "description": "Core Unity package for CignvsLab research projects.",
   "unity": "2022.3",
@@ -22,8 +22,13 @@
       "path": "Samples~/Prefabs"
     },
     {
+      "displayName": "Useful scripts",
+      "description": "Scripts for use in objects that want to commuicate with the server.",
+      "path": "Samples~/Scripts"
+    },
+    {
       "displayName": "Node.js server",
-      "description": "A node.js server to serve as communications server for CommsManager.",
+      "description": "A node.js server to serve as communications server for Unity.",
       "path": "Samples~/Server"
     }
   ],

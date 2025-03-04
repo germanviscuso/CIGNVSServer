@@ -26,6 +26,11 @@ namespace CignvsLab
             await ConnectToServer();
         }
 
+        public bool IsConnected()
+        {
+            return websocket != null && websocket.State == WebSocketState.Open;
+        }
+
         async Task ConnectToServer()
         {
             if (websocket != null)
@@ -56,23 +61,36 @@ namespace CignvsLab
         void Update()
         {
     #if !UNITY_WEBGL || UNITY_EDITOR
-            websocket.DispatchMessageQueue();
+            if(websocket != null) websocket.DispatchMessageQueue();
     #endif
         }
 
         public async void SubscribeToMQTTChannel(string channel)
         {
-            if (websocket.State == WebSocketState.Open)
-            {
-                var jsonMessage = JsonConvert.SerializeObject(new
-                {
-                    command = "subscribe",
-                    channel = channel
-                });
+            Debug.Log($"🔗 Attempting to subscribe to: {channel}");
 
-                await websocket.SendText(jsonMessage);
-                Debug.Log($"🔗 Subscribed to: {channel}");
+            if (websocket == null)
+            {
+                Debug.LogError("❌ WebSocket is NULL inside SubscribeToMQTTChannel!");
+                return;
             }
+
+            Debug.Log($"✅ WebSocket object exists, state = {websocket.State}");
+
+            if (websocket.State != WebSocketState.Open)
+            {
+                Debug.LogWarning("⚠️ WebSocket is not OPEN, cannot subscribe yet.");
+                return;
+            }
+
+            var jsonMessage = JsonConvert.SerializeObject(new
+            {
+                command = "subscribe",
+                channel = channel
+            });
+
+            await websocket.SendText(jsonMessage);
+            Debug.Log($"✅ Successfully subscribed to: {channel}");
         }
 
         public async void UnsubscribeFromMQTTChannel(string channel)

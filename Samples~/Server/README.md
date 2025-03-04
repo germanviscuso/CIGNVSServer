@@ -5,6 +5,11 @@ Servidor de soporte de proyectos de Cignvs Lab
 - Sirve de esqueleto para comenzar el desarrollo del servidor Dharana
 - Agrega MQTT para manejo de canales de comunicación en puerto 1883 (pub/sub)
 
+## Prerequisitos
+- Instalar el MQTT broker Mosquitto en donde corre el server (puerto default, 1883)
+- En mosquitto.conf setear
+-- allow_anonymous true
+
 ## Uso
 - Poner las gafas y el ordenador que correo el servidor en la misma Wifi
 - En el directorio raiz hacer: `npm install && npm start` (copiar IP)
@@ -16,6 +21,7 @@ Servidor de soporte de proyectos de Cignvs Lab
 
 ## Ventajas
 - Permite hacer DEBUG remoto de lo que sucede en las gafas (Debug.Log también se direcciona al servidor)
+
 ## TODO
 - Agregar estructura de mensajes de más alto nivel
 - Publicar capabilities (topicos, si persisten, si es bidireccional, etc)

@@ -19,7 +19,12 @@ const wsport = 3000;
 const mqttport = 1883;
 
 const wss = new WebSocket.Server({ port: wsport });
-const mqttClient = mqtt.connect("mqtt://localhost:" + mqttport);
+const mqttClient = mqtt.connect("mqtt://localhost:" + mqttport, {
+  reconnectPeriod: 1000, // Try reconnecting every 1 second
+  connectTimeout: 30 * 1000, // Allow 30 seconds for connection
+  clean: false, // Keep session open (ensures subscriptions persist)
+  clientId: localIP
+});
 
 console.log("🚀 CignvsLab server running on:");
 console.log(`   🌍 Local:   ws://localhost:${wsport}`);
@@ -46,8 +51,15 @@ wss.on("connection", (ws) => {
       if (command === "subscribe") {
         console.log(`🔗 Unity requested subscription to [${channel}]`);
         clientSubscriptions.get(ws).add(channel);
-        mqttClient.subscribe(channel);
-      } 
+    
+        mqttClient.subscribe(channel, (err, granted) => {
+            if (err) {
+                console.error(`❌ Failed to subscribe to [${channel}]:`, err);
+            } else {
+                console.log(`✅ Successfully subscribed to: ${granted.map(g => g.topic).join(", ")}`);
+            }
+        });
+      }
       else if (command === "unsubscribe") {
         console.log(`🔗 Unity requested to unsubscribe from [${channel}]`);
         clientSubscriptions.get(ws).delete(channel);
@@ -94,13 +106,28 @@ wss.on("connection", (ws) => {
   });
 });
 
+mqttClient.on("connect", () => {
+  console.log("✅ Connected to MQTT broker");
+});
+
+mqttClient.on("error", (err) => {
+  console.error("❌ MQTT Error:", err.message);
+});
+
+mqttClient.on("close", () => {
+  console.warn("⚠️ MQTT Connection closed, attempting to reconnect...");
+});
+
 // 🔥 Forward MQTT Messages to Subscribed WebSocket Clients
 mqttClient.on("message", (topic, message) => {
   console.log(`📡 MQTT Message on [${topic}]: ${message.toString()}`);
 
   wss.clients.forEach(client => {
-    if (client.readyState === WebSocket.OPEN && clientSubscriptions.get(client)?.has(topic)) {
-      client.send(JSON.stringify({ channel: topic, message: message.toString() }));
-    }
+      if (client.readyState === WebSocket.OPEN && clientSubscriptions.get(client)?.has(topic)) {
+          console.log(`📡 Forwarding MQTT → WebSocket: ${topic} → ${message}`);
+          client.send(JSON.stringify({ channel: topic, message: message.toString() }));
+      } else {
+          console.log(`⚠️ No WebSocket clients subscribed to [${topic}]`);
+      }
   });
 });
