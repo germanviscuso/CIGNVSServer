@@ -205,6 +205,4 @@ crashlytics-build.properties
 /[Aa]ssets/[Ss]treamingAssets/aa/*
 *_BurstDebugInformation_DoNotShip
 
-/*.meta
-
 .DS_Store

@@ -17,8 +17,8 @@
   "hideInEditor": false,
   "samples": [
     {
-      "displayName": "CommsManager Prefab",
-      "description": "A prefab containing the CommsManager component providing websockets communication.",
+      "displayName": "Prefabs",
+      "description": "Prefabs containing the CommsManager components providing websockets communication and samples.",
       "path": "Samples~/Prefabs"
     },
     {
