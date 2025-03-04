@@ -6,10 +6,10 @@ using System.Collections;
 namespace CignvsLab
 {
     // Script to drop in Unity objects that want to do comms via CommsManager
-    public class TestMessenger : MonoBehaviour
+    public class BigTestMessenger : MonoBehaviour
     {
         private CommsManager commsManager;
-        private string testTopic = "test/topic";
+        private string testTopic = "test/large";
 
         [Obsolete]
         void Start()
@@ -42,15 +42,21 @@ namespace CignvsLab
 
         private void SendTestMessage()
         {
-            string message = $"Hello from Unity! {DateTime.Now.ToLongTimeString()}";
-            Debug.Log($"📤 Sending short message as string");
+            Debug.Log($"📤 Sending large message as JSON");
 
-            commsManager.PublishToMQTT(testTopic, message);
+            var largePayload = new
+            {
+                message = new string('A', 10000) // 10,000 characters (~10 KB)
+            };
+
+            string jsonMessage = JsonConvert.SerializeObject(largePayload);
+
+            commsManager.PublishToMQTT(testTopic, jsonMessage);
         }
 
         private void OnMessageReceived(string message)
         {
-            Debug.Log($"📩 Received short message eco: {message}");
+            Debug.Log($"📩 Received large message eco: {message}");
         }
     }
 }

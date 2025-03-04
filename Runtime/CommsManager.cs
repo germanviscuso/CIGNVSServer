@@ -75,7 +75,7 @@ namespace CignvsLab
                 return;
             }
 
-            Debug.Log($"✅ WebSocket object exists, state = {websocket.State}");
+            //Debug.Log($"✅ WebSocket object exists, state = {websocket.State}");
 
             if (websocket.State != WebSocketState.Open)
             {

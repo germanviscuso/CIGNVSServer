@@ -24,7 +24,7 @@ const mqttClient = mqtt.connect("mqtt://localhost:" + mqttport, {
   reconnectPeriod: 1000, // Try reconnecting every 1 second
   connectTimeout: 30 * 1000, // Allow 30 seconds for connection
   clean: false, // Keep session open (ensures subscriptions persist)
-  clientId: localIP
+  clientId: localIP // anonymous not allowed without auth
 });
 
 console.log("🚀 CignvsLab server running on:");
@@ -38,11 +38,13 @@ const clientSubscriptions = new Map();
 wss.on("connection", (ws) => {
   console.log("⚡ A client connected");
 
-  clientSubscriptions.set(ws, new Set());
+  if (!clientSubscriptions.has(ws)) {
+    clientSubscriptions.set(ws, new Set());
+  }
 
   ws.on("message", (message) => {
     try {
-      if (verbose) console.log(`📩 Received WebSocket message of size: ${Buffer.byteLength(message, 'utf8')} bytes`);
+      if (verbose) console.log(`📩 [server] Received WebSocket message of size: ${Buffer.byteLength(message, 'utf8')} bytes`);
 
       const parsedMessage = JSON.parse(message);
       const command = parsedMessage.command;
@@ -56,20 +58,39 @@ wss.on("connection", (ws) => {
         mqttMessage = JSON.stringify(mqttMessage);
       }
 
-      if (command === "subscribe") {
-        console.log(`🔗 Unity requested subscription to [${channel}]`);
-        clientSubscriptions.get(ws).add(channel);
+      // if (command === "subscribe") {
+      //   console.log(`🔗 Unity requested subscription to [${channel}]`);
+      //   clientSubscriptions.get(ws).add(channel);
     
-        mqttClient.subscribe(channel, (err, granted) => {
-            if (err) {
-                console.error(`❌ Failed to subscribe to [${channel}]:`, err);
-            } else {
-                console.log(`✅ Successfully subscribed to: ${granted.map(g => g.topic).join(", ")}`);
-            }
-        });
-      }
+      //   mqttClient.subscribe(channel, (err, granted) => {
+      //       if (err) {
+      //           console.error(`❌ Failed to subscribe to [${channel}]:`, err);
+      //       } else {
+      //           console.log(`✅ Successfully subscribed to: ${granted.map(g => g.topic).join(", ")}`);
+      //       }
+      //   });
+      // }
+      if (command === "subscribe") {
+          if (!clientSubscriptions.get(ws).has(channel)) {
+              console.log(`🔗 [server] Unity requested subscription to [${channel}]`);
+              clientSubscriptions.get(ws).add(channel);
+              mqttClient.subscribe(channel, (err) => {
+                  if (!err) {
+                      console.log(`✅ [server] Successfully subscribed to: ${channel}`);
+                  } else {
+                      console.error(`❌ [server] Failed to subscribe to [${channel}]:`, err);
+                  }
+              });
+          } else {
+              console.log(`⚠️ [server] Already subscribed to ${channel}, skipping duplicate.`);
+          }
+      } 
+      else if (command === "publish") {
+          console.log(`📤 [server] Publishing to MQTT: [${channel}] → ${mqttMessage}`);
+          mqttClient.publish(channel, mqttMessage);
+      } 
       else if (command === "unsubscribe") {
-        console.log(`🔗 Unity requested to unsubscribe from [${channel}]`);
+        console.log(`🔗 [server] Unity requested to unsubscribe from [${channel}]`);
         clientSubscriptions.get(ws).delete(channel);
         
         // Check if no WebSocket clients are subscribed before unsubscribing from MQTT
@@ -79,7 +100,7 @@ wss.on("connection", (ws) => {
         }
       } 
       else if (command === "publish") {
-        console.log(`📤 Publishing to MQTT: [${channel}] → ${mqttMessage}`);
+        console.log(`📤 [server] Publishing to MQTT: [${channel}] → ${mqttMessage}`);
         mqttClient.publish(channel, mqttMessage);
       } 
       // else if (command === "debug_log") {
@@ -127,38 +148,38 @@ wss.on("connection", (ws) => {
           mqttClient.publish(logTopic, JSON.stringify(logMessage));
       }    
     } catch (error) {
-      console.error("❌ Error parsing WebSocket message:", error);
+      console.error("❌ [server] Error parsing WebSocket message:", error);
     }
   });
 
   ws.on("close", () => {
-    console.log("❌ Client disconnected");
+    console.log("❌ [server] Client disconnected");
     clientSubscriptions.delete(ws);
   });
 });
 
 mqttClient.on("connect", () => {
-  console.log("✅ Connected to MQTT broker");
+  console.log("✅ [server] Connected to MQTT broker");
 });
 
 mqttClient.on("error", (err) => {
-  console.error("❌ MQTT Error:", err.message);
+  console.error("❌ [server] MQTT Error:", err.message);
 });
 
 mqttClient.on("close", () => {
-  console.warn("⚠️ MQTT Connection closed, attempting to reconnect...");
+  console.warn("⚠️ [server] MQTT Connection closed, attempting to reconnect...");
 });
 
 // 🔥 Forward MQTT Messages to Subscribed WebSocket Clients
 mqttClient.on("message", (topic, message) => {
-  console.log(`📡 MQTT Message on [${topic}]: ${message.toString()}`);
+  console.log(`📡 [server] Received MQTT Message on [${topic}]: ${message.toString()}`);
 
   wss.clients.forEach(client => {
       if (client.readyState === WebSocket.OPEN && clientSubscriptions.get(client)?.has(topic)) {
-          console.log(`📡 Forwarding MQTT → WebSocket: ${topic} → ${message}`);
+          console.log(`📡 [server] Forwarding MQTT → WebSocket: ${topic} → ${message}`);
           client.send(JSON.stringify({ channel: topic, message: message.toString() }));
       } else {
-          console.log(`⚠️ No WebSocket clients subscribed to [${topic}]`);
+          console.log(`⚠️ [server] No WebSocket clients subscribed to [${topic}]`);
       }
   });
 });
