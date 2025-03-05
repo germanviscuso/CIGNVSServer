@@ -2,6 +2,10 @@ const WebSocket = require("ws");
 const mqtt = require("mqtt");
 const os = require("os");
 
+function timestamp(){
+  return new Date().toLocaleTimeString('en-US', { hour12: false });
+}
+
 function getLocalIP() {
   const interfaces = os.networkInterfaces();
   for (const interfaceName in interfaces) {
@@ -52,7 +56,7 @@ console.log(`   📡 Network: mqtt://${localIP}:${mqttport}`);
 const clientSubscriptions = new Map();
 
 wss.on("connection", (ws) => {
-  console.log("⚡ [server] A client connected");
+  console.log(`⚡ [server] @ ${timestamp()} A client connected`);
 
   if (!clientSubscriptions.has(ws)) {
     clientSubscriptions.set(ws, new Set());
@@ -60,13 +64,13 @@ wss.on("connection", (ws) => {
 
   ws.on("message", (message) => {
     try {
-      if (verbose) console.log(`📩 [server] Received WebSocket message of size: ${Buffer.byteLength(message, 'utf8')} bytes`);
+      if (verbose) console.log(`📩 [server] @ ${timestamp()} Received WebSocket message of size: ${Buffer.byteLength(message, 'utf8')} bytes`);
 
       const parsedMessage = JSON.parse(message);
       const command = parsedMessage.command;
       const channel = parsedMessage.channel;
       const mqttMessage = parsedMessage.message;
-      const timestamp = parsedMessage.timestamp;
+      const messageTimestamp = parsedMessage.timestamp;
       const stackTrace = parsedMessage.stackTrace;
 
       // 🛠 Detect if message is already an object and convert if necessary
@@ -76,25 +80,25 @@ wss.on("connection", (ws) => {
 
       if (command === "subscribe") {
           if (!clientSubscriptions.get(ws).has(channel)) {
-              console.log(`🔗 [server] Unity requested subscription to [${channel}]`);
+              console.log(`🔗 [server] @ ${timestamp()} Unity requested subscription to [${channel}]`);
               clientSubscriptions.get(ws).add(channel);
               mqttClient.subscribe(channel, (err) => {
                   if (!err) {
-                      console.log(`✅ [server] Successfully subscribed to: ${channel}`);
+                      console.log(`✅ [server] @ ${timestamp()} Successfully subscribed to: ${channel}`);
                   } else {
-                      console.error(`❌ [server] Failed to subscribe to [${channel}]:`, err);
+                      console.error(`❌ [server] @ ${timestamp()} Failed to subscribe to [${channel}]:`, err);
                   }
               });
           } else {
-              console.log(`⚠️ [server] Already subscribed to ${channel}, skipping duplicate.`);
+              console.log(`⚠️ [server] @ ${timestamp()} Already subscribed to ${channel}, skipping duplicate.`);
           }
       } 
       else if (command === "publish") {
-          console.log(`📤 [server] Publishing to MQTT: [${channel}] → ${truncateMessage(mqttMessage)}`);
+          console.log(`📤 [server] @ ${timestamp()} Publishing to MQTT: [${channel}] → ${truncateMessage(mqttMessage)}`);
           mqttClient.publish(channel, mqttMessage);
       } 
       else if (command === "unsubscribe") {
-        console.log(`🔗 [server] Unity requested to unsubscribe from [${channel}]`);
+        console.log(`🔗 [server] @ ${timestamp()} Unity requested to unsubscribe from [${channel}]`);
         clientSubscriptions.get(ws).delete(channel);
         
         // Check if no WebSocket clients are subscribed before unsubscribing from MQTT
@@ -115,7 +119,7 @@ wss.on("connection", (ws) => {
           }
       
           // ✅ Ensure timestamp and stack trace exist in log object
-          logMessage.timestamp = timestamp || new Date().toISOString();
+          logMessage.timestamp = messageTimestamp || new Date().toISOString();
           logMessage.stackTrace = stackTrace || null;
       
           // 🔥 Print full log details to console
@@ -128,38 +132,42 @@ wss.on("connection", (ws) => {
           mqttClient.publish(logTopic, JSON.stringify(logMessage));
       }    
     } catch (error) {
-      console.error("❌ [server] Error parsing WebSocket message:", error);
+      console.error(`❌ [server] @ ${timestamp()} Error parsing WebSocket message:`, error);
     }
   });
 
   ws.on("close", () => {
-    console.log("❌ [server] Client disconnected");
+    console.log(`❌ [server] @ ${timestamp()} Client disconnected`);
     clientSubscriptions.delete(ws);
   });
 });
 
 mqttClient.on("connect", () => {
-  console.log("✅ [server] Connected to MQTT broker");
+  console.log(`✅ [server] @ ${timestamp()} Connected to MQTT broker`);
 });
 
 mqttClient.on("error", (err) => {
-  console.error("❌ [server] MQTT Error:", err.message);
+  console.error(`❌ [server] @ ${timestamp()} MQTT Error:`, err.message);
 });
 
 mqttClient.on("close", () => {
-  console.warn("⚠️ [server] MQTT Connection closed, attempting to reconnect...");
+  console.warn(`⚠️ [server] @ ${timestamp()} MQTT Connection closed, attempting to reconnect...`);
 });
 
 // 🔥 Forward MQTT Messages to Subscribed WebSocket Clients
 mqttClient.on("message", (topic, message) => {
-  console.log(`📡 [server] Received MQTT Message on [${topic}]: ${truncateMessage(message.toString())}`);
-
+  console.log(`📡 [server] @ ${timestamp()} Received MQTT Message on [${topic}]: ${truncateMessage(message.toString())}`);
+  const hasSubscribers = Array.from(clientSubscriptions.values()).some(subs => subs.has(topic));
+  if (!hasSubscribers) {
+    console.log(`⚠️ [server] @ ${timestamp()} No WebSocket clients subscribed to [${topic}]. Skipping forwarding.`);
+    return;
+  }
   wss.clients.forEach(client => {
       if (client.readyState === WebSocket.OPEN && clientSubscriptions.get(client)?.has(topic)) {
-          console.log(`📡 [server] Forwarding MQTT → WebSocket: ${topic} → ${message.length} bytes`);
+          console.log(`📡 [server] @ ${timestamp()} Forwarding MQTT → WebSocket: ${topic} → ${message.length} bytes`);
           client.send(JSON.stringify({ channel: topic, message: message.toString() }));
       } else {
-          console.log(`⚠️ [server] No WebSocket clients subscribed to [${topic}]`);
+          console.log(`⚠️ [server] @ ${timestamp()} No WebSocket clients subscribed to [${topic}]`);
       }
   });
 });
