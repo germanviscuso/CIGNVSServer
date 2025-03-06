@@ -1,6 +1,6 @@
 {
   "name": "cignvslab-server",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Servidor WebSockets + MQTT para comunicación con Unity y navegadores",
   "main": "server.js",
   "scripts": {
