@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Text;
 using System.Threading.Tasks;
@@ -17,9 +18,13 @@ namespace CignvsLab
 
         [Tooltip("Enable extended logs (includes stack trace).")]
         public bool extendedLogs = false;
-        
+
         private WebSocket websocket;
         private Dictionary<string, Action<string>> channelSubscriptions = new Dictionary<string, Action<string>>();
+        private HashSet<string> requestedSubscriptions = new HashSet<string>(); // Prevent duplicate WebSocket requests
+        private Queue<(string, string)> messageQueue = new Queue<(string, string)>();
+        private List<string> pendingSubscriptions = new List<string>();
+        private bool isReconnecting = false;
 
         async void Start()
         {
@@ -42,8 +47,24 @@ namespace CignvsLab
 
             websocket.OnOpen += () =>
             {
-                RemoteLogHandler.Initialize(websocket, enableLogging, extendedLogs);
                 Debug.Log("✅ WebSocket Connected!");
+
+                // ✅ Initialize Remote Logging once connected
+                RemoteLogHandler.Initialize(websocket, enableLogging, extendedLogs);
+
+                // ✅ Resubscribe to all pending topics after reconnection
+                foreach (string channel in pendingSubscriptions)
+                {
+                    SubscribeToMQTTChannel(channel);
+                }
+                pendingSubscriptions.Clear();
+
+                // ✅ Send all cached messages after reconnection
+                while (messageQueue.Count > 0)
+                {
+                    var (channel, message) = messageQueue.Dequeue();
+                    PublishToMQTT(channel, message);
+                }
             };
 
             websocket.OnMessage += (bytes) =>
@@ -53,9 +74,28 @@ namespace CignvsLab
             };
 
             websocket.OnError += (e) => { Debug.LogError("🚨 WebSocket Error: " + e); };
-            websocket.OnClose += (e) => { Debug.LogWarning("❌ WebSocket Disconnected."); };
+            websocket.OnClose += async (e) =>
+            {
+                Debug.LogWarning("❌ WebSocket Disconnected. Attempting reconnect...");
+                await AttemptReconnect();
+            };
 
             await websocket.Connect();
+        }
+
+        async Task AttemptReconnect()
+        {
+            if (isReconnecting) return;
+            isReconnecting = true;
+
+            while (!IsConnected())
+            {
+                Debug.Log("🔄 Attempting to reconnect to WebSocket...");
+                await Task.Delay(3000);
+                await ConnectToServer();
+            }
+
+            isReconnecting = false;
         }
 
         void Update()
@@ -67,76 +107,37 @@ namespace CignvsLab
 
         public async void SubscribeToMQTTChannel(string channel)
         {
-            //Debug.Log($"🔗 Attempting to subscribe to: {channel}");
-
-            if (websocket == null)
+            if (requestedSubscriptions.Contains(channel))
             {
-                Debug.LogError("❌ WebSocket is NULL inside SubscribeToMQTTChannel!");
+                Debug.Log($"⚠️ Already requested WebSocket subscription to {channel}, skipping.");
                 return;
             }
 
-            //Debug.Log($"✅ WebSocket object exists, state = {websocket.State}");
-
-            if (websocket.State != WebSocketState.Open)
+            if (IsConnected())
             {
-                Debug.LogWarning("⚠️ WebSocket is not OPEN, cannot subscribe yet.");
-                return;
+                var jsonMessage = JsonConvert.SerializeObject(new
+                {
+                    command = "subscribe",
+                    channel = channel
+                });
+
+                await websocket.SendText(jsonMessage);
+                Debug.Log($"✅ Successfully subscribed to: {channel}");
+                requestedSubscriptions.Add(channel);
             }
-
-            var jsonMessage = JsonConvert.SerializeObject(new
+            else
             {
-                command = "subscribe",
-                channel = channel
-            });
-
-            await websocket.SendText(jsonMessage);
-            Debug.Log($"✅ Successfully subscribed to: {channel}");
+                Debug.Log($"🔄 Caching subscription request: {channel}");
+                if (!pendingSubscriptions.Contains(channel))
+                {
+                    pendingSubscriptions.Add(channel);
+                }
+            }
         }
-
-        // public async void SubscribeToMQTTChannel(string channel)
-        // {
-        //     Debug.Log($"🔗 Attempting to subscribe to: {channel}");
-
-        //     if (websocket == null)
-        //     {
-        //         Debug.LogError("❌ WebSocket is NULL inside SubscribeToMQTTChannel!");
-        //         return;
-        //     }
-
-        //     Debug.Log($"✅ WebSocket object exists, state = {websocket.State}");
-
-        //     if (websocket.State != WebSocketState.Open)
-        //     {
-        //         Debug.LogWarning("⚠️ WebSocket is not OPEN, cannot subscribe yet.");
-        //         return;
-        //     }
-
-        //     // ✅ Check if we're already subscribed to avoid duplicates
-        //     if (channelSubscriptions.ContainsKey(channel))
-        //     {
-        //         Debug.LogWarning($"⚠️ Already subscribed to {channel}, skipping duplicate subscription.");
-        //         return;
-        //     }
-
-        //     var jsonMessage = JsonConvert.SerializeObject(new
-        //     {
-        //         command = "subscribe",
-        //         channel = channel
-        //     });
-
-        //     await websocket.SendText(jsonMessage);
-        //     Debug.Log($"✅ Successfully subscribed to: {channel}");
-
-        //     // ✅ Store subscription callback in dictionary
-        //     channelSubscriptions[channel] = (message) =>
-        //     {
-        //         Debug.Log($"📩 Received MQTT message on {channel}: {message}");
-        //     };
-        // }
 
         public async void UnsubscribeFromMQTTChannel(string channel)
         {
-            if (websocket.State == WebSocketState.Open)
+            if (IsConnected() && requestedSubscriptions.Contains(channel))
             {
                 var jsonMessage = JsonConvert.SerializeObject(new
                 {
@@ -146,28 +147,28 @@ namespace CignvsLab
 
                 await websocket.SendText(jsonMessage);
                 Debug.Log($"❌ Unsubscribed from: {channel}");
+                requestedSubscriptions.Remove(channel);
             }
         }
 
-        // public async void PublishToMQTT(string channel, string message)
-        // {
-        //     if (websocket.State == WebSocketState.Open)
-        //     {
-        //         var jsonMessage = JsonConvert.SerializeObject(new
-        //         {
-        //             command = "publish",
-        //             channel = channel,
-        //             message = message
-        //         });
-
-        //         await websocket.SendText(jsonMessage);
-        //         Debug.Log($"📤 Published to {channel}: {message}");
-        //     }
-        // }
-
-        public async void PublishToMQTT(string channel, object message)
+        public void PublishToChannel(string channel, object message)
         {
-            if (websocket.State == WebSocketState.Open)
+            string messageString = JsonConvert.SerializeObject(message);
+
+            if (IsConnected())
+            {
+                PublishToMQTT(channel, messageString);
+            }
+            else
+            {
+                Debug.Log($"🔄 Caching message for offline send: {channel} → {messageString}");
+                messageQueue.Enqueue((channel, messageString));
+            }
+        }
+
+        private async void PublishToMQTT(string channel, string message)
+        {
+            if (IsConnected())
             {
                 var jsonMessage = JsonConvert.SerializeObject(new
                 {
@@ -177,7 +178,7 @@ namespace CignvsLab
                 });
 
                 await websocket.SendText(jsonMessage);
-                Debug.Log($"📤 Published to {channel}: {JsonConvert.SerializeObject(message)}");
+                Debug.Log($"📤 Published to {channel}: {message}");
             }
         }
 
@@ -209,11 +210,14 @@ namespace CignvsLab
 
         public void SubscribeToChannel(string channel, Action<string> callback)
         {
-            if (!channelSubscriptions.ContainsKey(channel))
+            if (channelSubscriptions.ContainsKey(channel))
             {
-                channelSubscriptions[channel] = callback;
-                SubscribeToMQTTChannel(channel);
+                Debug.Log($"⚠️ Already locally subscribed to {channel}, skipping duplicate.");
+                return;
             }
+
+            channelSubscriptions[channel] = callback;
+            SubscribeToMQTTChannel(channel);
         }
 
         public void UnsubscribeFromChannel(string channel)

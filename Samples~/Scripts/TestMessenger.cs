@@ -22,35 +22,24 @@ namespace CignvsLab
                 return;
             }
 
-            StartCoroutine(WaitForWebSocketAndSubscribe());
-
-            Invoke(nameof(SendTestMessage), 3f);
-        }
-
-        IEnumerator WaitForWebSocketAndSubscribe()
-        {
-            Debug.Log("⏳ Waiting for WebSocket connection before subscribing...");
-
-            while (commsManager == null || !commsManager.IsConnected())
-            {
-                yield return new WaitForSeconds(1f);
-            }
-
-            Debug.Log($"✅ Subscribing to MQTT topic: {testTopic}");
+            // ✅ Subscribe immediately (CommsManager queues if not connected)
             commsManager.SubscribeToChannel(testTopic, OnMessageReceived);
+
+            // ✅ Wait 3 seconds and then send a test message
+            Invoke(nameof(SendTestMessage), 3f);
         }
 
         private void SendTestMessage()
         {
-            string message = $"Hello from Unity! {DateTime.Now.ToLongTimeString()}";
-            Debug.Log($"📤 Sending short message as string");
+            string message = $"Hello from Unity! {DateTime.Now:HH:mm:ss}";
+            Debug.Log($"📤 Sending test message: {message}");
 
-            commsManager.PublishToMQTT(testTopic, message);
+            commsManager.PublishToChannel(testTopic, message);
         }
 
         private void OnMessageReceived(string message)
         {
-            Debug.Log($"📩 Received short message eco: {message}");
+            Debug.Log($"📩 Received test message echo: {message}");
         }
     }
 }

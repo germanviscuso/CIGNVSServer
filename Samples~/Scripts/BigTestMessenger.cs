@@ -5,7 +5,6 @@ using System.Collections;
 
 namespace CignvsLab
 {
-    // Script to drop in Unity objects that want to do comms via CommsManager
     public class BigTestMessenger : MonoBehaviour
     {
         private CommsManager commsManager;
@@ -22,22 +21,11 @@ namespace CignvsLab
                 return;
             }
 
-            StartCoroutine(WaitForWebSocketAndSubscribe());
-
-            Invoke(nameof(SendTestMessage), 3f);
-        }
-
-        IEnumerator WaitForWebSocketAndSubscribe()
-        {
-            Debug.Log("⏳ Waiting for WebSocket connection before subscribing...");
-
-            while (commsManager == null || !commsManager.IsConnected())
-            {
-                yield return new WaitForSeconds(1f);
-            }
-
-            Debug.Log($"✅ Subscribing to MQTT topic: {testTopic}");
+            // ✅ Subscribe immediately (CommsManager queues if not connected)
             commsManager.SubscribeToChannel(testTopic, OnMessageReceived);
+
+            // ✅ Wait 3 seconds and then send a test message
+            Invoke(nameof(SendTestMessage), 3f);
         }
 
         private void SendTestMessage()
@@ -46,17 +34,17 @@ namespace CignvsLab
 
             var largePayload = new
             {
-                message = new string('A', 5000) // (~5 KB of As)
+                message = new string('A', 50000) // (~50 KB of 'A's)
             };
 
             string jsonMessage = JsonConvert.SerializeObject(largePayload);
 
-            commsManager.PublishToMQTT(testTopic, jsonMessage);
+            commsManager.PublishToChannel(testTopic, jsonMessage);
         }
 
         private void OnMessageReceived(string message)
         {
-            Debug.Log($"📩 Received large message eco: {message}");
+            Debug.Log($"📩 Received large message echo: {message}");
         }
     }
 }
