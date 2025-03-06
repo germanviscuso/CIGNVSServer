@@ -18,11 +18,15 @@ namespace CignvsLab
 
         [Tooltip("Enable extended logs (includes stack trace).")]
         public bool extendedLogs = false;
+        [Tooltip("Enable extended logs (includes stack trace).")]
+        public string loggingChannel = "debug";
 
         private WebSocket websocket;
         private Dictionary<string, Action<string>> channelSubscriptions = new Dictionary<string, Action<string>>();
         private HashSet<string> requestedSubscriptions = new HashSet<string>(); // Prevent duplicate WebSocket requests
-        private Queue<(string, string)> messageQueue = new Queue<(string, string)>();
+        private Queue<(string, string)> messageQueue = new Queue<(string, string)>(); // ✅ Queue for general messages
+        private Queue<(string, string)> logQueue = new Queue<(string, string)>(); // ✅ Queue for debug logs
+
         private List<string> pendingSubscriptions = new List<string>();
         private bool isReconnecting = false;
 
@@ -50,7 +54,7 @@ namespace CignvsLab
                 Debug.Log("✅ WebSocket Connected!");
 
                 // ✅ Initialize Remote Logging once connected
-                RemoteLogHandler.Initialize(websocket, enableLogging, extendedLogs);
+                RemoteLogHandler.Initialize(this);
 
                 // ✅ Resubscribe to all pending topics after reconnection
                 foreach (string channel in pendingSubscriptions)
@@ -60,11 +64,13 @@ namespace CignvsLab
                 pendingSubscriptions.Clear();
 
                 // ✅ Send all cached messages after reconnection
-                while (messageQueue.Count > 0)
-                {
-                    var (channel, message) = messageQueue.Dequeue();
-                    PublishToMQTT(channel, message);
-                }
+                // while (messageQueue.Count > 0)
+                // {
+                //     var (channel, message) = messageQueue.Dequeue();
+                //     PublishToMQTT(channel, message);
+                // }
+                FlushQueuedMessages();  // ✅ Send stored messages after reconnection
+                FlushQueuedLogs();      // ✅ Send stored logs after reconnection
             };
 
             websocket.OnMessage += (bytes) =>
@@ -166,6 +172,19 @@ namespace CignvsLab
             }
         }
 
+        public void LogToChannel(string channel, string jsonLogMessage)
+        {
+            if (IsConnected())
+            {
+                PublishToMQTT(channel, jsonLogMessage);
+            }
+            else
+            {
+                Debug.LogWarning($"⚠️ WebSocket offline. Queuing debug log for later: {jsonLogMessage}");
+                logQueue.Enqueue((channel, jsonLogMessage));
+            }
+        }
+
         private async void PublishToMQTT(string channel, string message)
         {
             if (IsConnected())
@@ -178,7 +197,7 @@ namespace CignvsLab
                 });
 
                 await websocket.SendText(jsonMessage);
-                Debug.Log($"📤 Published to {channel}: {message}");
+                //Debug.Log($"📤 Published to {channel}: {message}");
             }
         }
 
@@ -191,6 +210,9 @@ namespace CignvsLab
                 {
                     string channel = parsedMessage["channel"].ToString();
                     string message = parsedMessage["message"].ToString();
+
+                    // ✅ Ignore incoming logs from logging channel to prevent re-logging
+                    if (channel.StartsWith(loggingChannel)) return;
 
                     if (channelSubscriptions.ContainsKey(channel))
                     {
@@ -226,6 +248,24 @@ namespace CignvsLab
             {
                 channelSubscriptions.Remove(channel);
                 UnsubscribeFromMQTTChannel(channel);
+            }
+        }
+
+        private void FlushQueuedMessages()
+        {
+            while (messageQueue.Count > 0)
+            {
+                var (channel, queuedMessage) = messageQueue.Dequeue();
+                PublishToMQTT(channel, queuedMessage);
+            }
+        }
+
+        private void FlushQueuedLogs()
+        {
+            while (logQueue.Count > 0)
+            {
+                var (channel, queuedLog) = logQueue.Dequeue();
+                PublishToMQTT(channel, queuedLog);
             }
         }
     }

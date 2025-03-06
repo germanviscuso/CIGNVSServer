@@ -9,22 +9,36 @@ namespace CignvsLab
 
     public class RemoteLogHandler : ILogHandler
     {
+        private RemoteLogHandler() { } // ✅ Private constructor to enforce Singleton pattern
+        private static RemoteLogHandler instance;
         private ILogHandler defaultLogHandler = UnityEngine.Debug.unityLogger.logHandler;
-        private static WebSocket websocket;
+        private CommsManager commsManager;
         private static bool enableRemoteLogging = true;
         private static bool extendedLogging = false;
+        private static string debugChannel = "debug";
 
-        public static void Initialize(WebSocket ws, bool enableLogging, bool useExtendedLogging)
+        public static void Initialize(CommsManager comms)
         {
-            if (ws == null)
+            if (comms == null)
             {
-                UnityEngine.Debug.LogWarning("[RemoteLogHandler] WebSocket instance is null. CommsManager might be missing from the scene.");
+                UnityEngine.Debug.LogWarning("⚠️ CommsManager instance is null. Logging will not be sent remotely.");
                 return;
             }
-            websocket = ws;
-            enableRemoteLogging = enableLogging;
-            extendedLogging = useExtendedLogging;
-            UnityEngine.Debug.unityLogger.logHandler = new RemoteLogHandler();
+
+            // ✅ Ensure instance exists
+            if (instance == null)
+                instance = new RemoteLogHandler();
+
+            enableRemoteLogging = comms.enableLogging;
+            extendedLogging = comms.extendedLogs;
+            debugChannel = comms.loggingChannel;
+            
+            // ✅ Store CommsManager reference
+            instance.commsManager = comms;
+            
+            UnityEngine.Debug.unityLogger.logHandler = instance;
+            
+            UnityEngine.Debug.Log($"✅ Remote logging initialized. Extended: {extendedLogging}");
         }
 
         public static void SetLoggingEnabled(bool enabled)
@@ -63,7 +77,7 @@ namespace CignvsLab
 
             defaultLogHandler.LogException(exception, context);
 
-            string topic = "debug/exceptions";
+            string topic = debugChannel + "/exceptions";
             SendLogToServer(topic, message, stackTrace, timestamp);
         }
 
@@ -72,31 +86,34 @@ namespace CignvsLab
             switch (logType)
             {
                 case LogType.Warning:
-                    return "debug/warnings";
+                    return debugChannel + "/warnings";
                 case LogType.Error:
                 case LogType.Assert:
-                    return "debug/errors";
+                    return debugChannel + "/errors";
                 case LogType.Exception:
-                    return "debug/exceptions";
+                    return debugChannel + "/exceptions";
                 default:
-                    return "debug/logs";
+                    return debugChannel + "/logs";
             }
         }
 
-        private static async void SendLogToServer(string topic, string message, string stackTrace, string timestamp)
+        private void SendLogToServer(string topic, string message, string stackTrace, string timestamp)
         {
-            if (enableRemoteLogging && websocket != null && websocket.State == WebSocketState.Open)
+            if (enableRemoteLogging && commsManager != null)
             {
                 var jsonLogMessage = JsonConvert.SerializeObject(new
                 {
                     command = "debug_log",
-                    channel = topic,
                     message = message,
                     timestamp = timestamp,
                     stackTrace = extendedLogging ? stackTrace : null 
                 });
 
-                await websocket.SendText(jsonLogMessage);
+                commsManager.LogToChannel(topic, jsonLogMessage);
+            }
+            else
+            {
+                UnityEngine.Debug.LogWarning("⚠️ Remote logging failed: CommsManager not initialized.");
             }
         }
 
