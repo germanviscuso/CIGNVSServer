@@ -2,7 +2,7 @@
   "name": "org.cignvslab.dependency-bootstrapper",
   "version": "1.0.0",
   "displayName": "CignvsLab Dependency Bootstrapper",
-  "description": "Temporary bootstrapper that installs dependencies into the project manifest.",
+  "description": "Now got to CignvsLab in Editor and click on Install (this will install the full package and its dependencies.",
   "unity": "2022.3",
   "keywords": ["cignvslab", "bootstrap", "dependencies"],
   "author": {
