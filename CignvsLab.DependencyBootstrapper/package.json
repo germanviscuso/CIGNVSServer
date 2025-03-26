@@ -1,6 +1,6 @@
 {
   "name": "org.cignvslab.dependency-bootstrapper",
-  "version": "1.0.0",
+  "version": "1.0.5",
   "displayName": "CignvsLab Dependency Bootstrapper",
   "description": "Now got to CignvsLab in Editor and click on Install (this will install the full package and its dependencies.",
   "unity": "2022.3",
