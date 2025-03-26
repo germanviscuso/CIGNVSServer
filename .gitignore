@@ -205,4 +205,8 @@ crashlytics-build.properties
 /[Aa]ssets/[Ss]treamingAssets/aa/*
 *_BurstDebugInformation_DoNotShip
 
+# MQTT persistent store
+mqtt-store
+
+# Mac files
 .DS_Store
