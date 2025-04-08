@@ -21,7 +21,7 @@ Servidor de soporte de proyectos de Cignvs Lab
 
 ## Ventajas
 - Permite hacer DEBUG remoto de lo que sucede en las gafas (Debug.Log también se direcciona al servidor)
-- Manejos de mesanjes genéricos json con pub/sub y persistencia
+- Manejos de mensajes genéricos json con pub/sub y persistencia local
 
 ## TODO
 - Publicar capabilities (topicos, si persisten, si es bidireccional, etc)
