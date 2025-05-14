@@ -1,7 +1,7 @@
 {
   "name": "cignvslab-server",
-  "version": "1.0.6",
-  "description": "Servidor WebSockets + MQTT persistente (Aedes) para comunicación con Unity y otros clientes",
+  "version": "1.0.7",
+  "description": "Servidor WebSockets + MQTT persistente (Aedes) + señalización WebRTC para comunicación con Unity y otros clientes",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
