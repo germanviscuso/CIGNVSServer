@@ -165,7 +165,9 @@ wss.on("connection", (ws) => {
 
   ws.on("message", (message) => {
     const messageString = message.toString(); // Work with the string form
-
+	// This will log EVERY message that arrives, before any parsing.
+    // This is our foolproof catch-all.
+    console.log(`[RAW_INCOMING] @ ${timestamp()} from Client ${ws.clientId} (SWRTC ID: ${ws.simpleWebRTCId || 'N/A'}):`, truncateMessage(messageString));
     // --- Try parsing as JSON first ---
     let isJson = false;
     if (messageString.startsWith('{') && messageString.endsWith('}')) {
@@ -230,7 +232,7 @@ wss.on("connection", (ws) => {
 
     // --- If not JSON, try parsing as SimpleWebRTC pipe-delimited format ---
     if (!isJson) {
-        if (verbose) console.log(`[WS-SWRTC] @ ${timestamp()} Received Raw from ${ws.clientId} (SWRTC ID: ${ws.simpleWebRTCId || 'N/A'}):`, truncateMessage(messageString));
+        //if (verbose) console.log(`[WS-SWRTC] @ ${timestamp()} Received Raw from ${ws.clientId} (SWRTC ID: ${ws.simpleWebRTCId || 'N/A'}):`, truncateMessage(messageString));
         handleSimpleWebRTCMessage(ws, messageString);
     }
   }); // End ws.on('message')
