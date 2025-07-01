@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unity Command & Stream Console</title>
+    <style>
+        :root { --main-bg: #f0f2f5; --panel-bg: #ffffff; --text-color: #333; --border-color: #d9d9d9; --accent-color: #007bff; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 20px; background-color: var(--main-bg); color: var(--text-color); }
+        h1, h3 { margin-top: 0; color: var(--text-color); }
+        .main-container { display: flex; flex-wrap: wrap; gap: 20px; height: calc(100vh - 80px); }
+        .video-container { flex: 3; min-width: 400px; background: #000; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; }
+        .video-wrapper { flex-grow: 1; display: flex; align-items: center; justify-content: center; background: #1a1a1a; }
+        video { width: 100%; height: 100%; object-fit: contain; }
+        .control-log-container { flex: 1; min-width: 300px; display: flex; flex-direction: column; gap: 20px; }
+        .panel { background-color: var(--panel-bg); padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24); }
+        .log-panel { flex-grow: 1; display: flex; flex-direction: column; }
+        #logBox { width: 100%; flex-grow: 1; box-sizing: border-box; resize: none; border: 1px solid var(--border-color); border-radius: 4px; padding: 10px; font-family: monospace; font-size: 12px; }
+        button { font-size: 16px; padding: 10px 15px; border-radius: 5px; border: none; background-color: var(--accent-color); color: white; cursor: pointer; transition: background-color 0.2s; }
+        button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #a0a0a0; cursor: not-allowed; }
+        #colorStatus { margin-top: 10px; padding: 10px; border: 1px solid var(--border-color); border-radius: 5px; text-align: center; font-weight: bold; transition: background-color 0.3s ease, color 0.3s ease; }
+        .hidden { display: none; }
+        .config-bar { display: flex; gap: 15px; align-items: center; margin-bottom: 15px; flex-wrap: wrap; }
+        .config-bar input { padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; }
+    </style>
+</head>
+<body>
+
+<h1>Unity Command & Stream Console</h1>
+
+<div class="config-bar">
+    <label for="websocketUrl">Server URL:</label>
+    <input type="url" id="websocketUrl" value="ws://192.168.50.154:3000" size="40">
+    <button id="connectBtn">Connect</button>
+    <button id="disconnectBtn" class="hidden">Disconnect</button>
+</div>
+
+<div class="main-container">
+    <div class="video-container panel">
+        <h3>Live Stream from Unity</h3>
+        <div class="video-wrapper">
+            <video id="remoteVideo" autoplay playsinline muted>Your browser does not support the video tag.</video>
+        </div>
+    </div>
+
+    <div class="control-log-container">
+        <div class="panel">
+            <h3>Commands</h3>
+            <button id="changeColorBtn" disabled>Change Color</button>
+            <p style="margin-bottom: 5px;">Unity Object Color:</p>
+            <div id="colorStatus">Disconnected</div>
+        </div>
+        <div class="panel log-panel">
+            <h3>Log</h3>
+            <textarea id="logBox" readonly></textarea>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    // This script now combines the logic from the example's main.js and webRTCManager.js
+    // and adapts it for our specific command console use case.
+
+    // --- WebRTCManager Class (from example, slightly adapted) ---
+    // Helper for signaling message types
+    const SignalingMessageType = { NEWPEER: "NEWPEER", NEWPEERACK: "NEWPEERACK", OFFER: "OFFER", ANSWER: "ANSWER", CANDIDATE: "CANDIDATE", DISPOSE: "DISPOSE", DATA: "DATA", COMPLETE: "COMPLETE" };
+    
+    // Helper to parse signaling messages
+    class SignalingMessage {
+        constructor(text) {
+            const parts = text.split("|");
+            this.Type = parts[0];
+            this.SenderPeerId = parts[1];
+            this.ReceiverPeerId = parts[2];
+
+            // The JSON message is always the 4th part (index 3).
+            // The rest are extra parameters we don't need to parse on the web client.
+            // This ensures we only try to parse the valid JSON portion.
+            this.Message = parts.length > 3 ? parts[3] : null; 
+        }
+        static create(type, sender, receiver, message) {
+            // This remains the same, as the web page doesn't need to send the extra fields.
+            return `${type}|${sender}|${receiver}|${message}|1|true`;
+        }
+    }
+
+    class WebRTCManager {
+        // ... (The full WebRTCManager.js code would go here, but for simplicity, 
+        // we'll integrate its core logic directly into our main script below)
+    }
+
+    // --- Main Application Logic ---
+
+    // UI Elements
+    const connectBtn = document.getElementById('connectBtn');
+    const disconnectBtn = document.getElementById('disconnectBtn');
+    const websocketUrlInput = document.getElementById('websocketUrl');
+    const logBox = document.getElementById('logBox');
+    const remoteVideo = document.getElementById('remoteVideo');
+    const changeColorBtn = document.getElementById('changeColorBtn');
+    const colorStatus = document.getElementById('colorStatus');
+
+    // State
+    let ws;
+    let peerConnections = new Map(); // peerId -> RTCPeerConnection
+    let dataChannels = new Map(); // peerId -> RTCDataChannel
+    const localPeerId = `WebConsole-${Math.random().toString(36).substring(2, 8)}`;
+    const stunServer = "stun:stun.l.google.com:19302";
+
+    const colors = [{ name: "Red", hex: "#e74c3c" }, { name: "Green", hex: "#2ecc71" }, { name: "Blue", hex: "#3498db" }];
+    let colorIndex = 0;
+
+    // --- Functions ---
+
+    function log(message) {
+        console.log(message);
+        logBox.value += `[${new Date().toLocaleTimeString()}] ${message}\n`;
+        logBox.scrollTop = logBox.scrollHeight;
+    }
+    
+    function updateUiForConnection(isConnected) {
+        connectBtn.disabled = isConnected;
+        disconnectBtn.disabled = !isConnected;
+        changeColorBtn.disabled = !isConnected || dataChannels.size === 0;
+        if (!isConnected) {
+            colorStatus.textContent = "Disconnected";
+            colorStatus.style.backgroundColor = "#eee";
+            colorStatus.style.color = "black";
+            remoteVideo.srcObject = null;
+        }
+    }
+
+    function connectToServer() {
+        const wsUrl = websocketUrlInput.value;
+        if (!wsUrl) {
+            alert("WebSocket URL is required.");
+            return;
+        }
+        
+        log(`Connecting to ${wsUrl}...`);
+        ws = new WebSocket(wsUrl);
+
+        ws.onopen = () => {
+            log(`✅ Connected! Our Peer ID: ${localPeerId}`);
+            updateUiForConnection(true);
+            
+            // 1. Announce our presence for WebRTC streaming (as a receiver)
+            const newPeerMsg = `NEWPEER|${localPeerId}|ALL|Web Console Peer|1|true`;
+            ws.send(newPeerMsg);
+            log(`-> Sent SWRTC NEWPEER message.`);
+        };
+
+        ws.onmessage = (event) => {
+            if (event.data.startsWith('{')) {
+                handleMqttJsonMessage(JSON.parse(event.data));
+            } else {
+                handleSimpleWebRTCMessage(new SignalingMessage(event.data));
+            }
+        };
+
+        ws.onerror = (error) => log(`❌ WebSocket Error: ${JSON.stringify(error)}`);
+
+        ws.onclose = () => {
+            log('🔌 Connection closed.');
+            updateUiForConnection(false);
+            peerConnections.forEach(pc => pc.close());
+            peerConnections.clear();
+            dataChannels.clear();
+        };
+    }
+
+    // This handles JSON messages from the server's MQTT bridge
+    function handleMqttJsonMessage(data) {
+        log(`<- Received JSON: ${JSON.stringify(data).substring(0, 150)}...`);
+        // This web page doesn't currently use MQTT messages, but the handler is here for future use.
+    }
+
+    // This handles the pipe-delimited SimpleWebRTC signaling messages
+    async function handleSimpleWebRTCMessage(msg) {
+        log(`<- Received SWRTC: ${msg.Type} from ${msg.SenderPeerId}`);
+
+        try {
+            switch (msg.Type) {
+                case 'NEWPEER':
+                    // A new peer (likely Unity) has joined. Acknowledge them.
+                    const ackMsg = SignalingMessage.create('NEWPEERACK', localPeerId, msg.SenderPeerId, "Web Console ACK");
+                    ws.send(ackMsg);
+                    log(`-> Sent NEWPEERACK to ${msg.SenderPeerId}`);
+                    break;
+                
+                case 'OFFER':
+                    // We received an offer to connect from a peer (Unity).
+                    if (!peerConnections.has(msg.SenderPeerId)) {
+                        createPeerConnection(msg.SenderPeerId);
+                    }
+                    const pc = peerConnections.get(msg.SenderPeerId);
+                    const offer = JSON.parse(msg.Message);
+                    await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: offer.sdp || offer.Sdp }));
+                    const answer = await pc.createAnswer();
+                    await pc.setLocalDescription(answer);
+
+                    const answerPayload = JSON.stringify({ type: answer.type, sdp: answer.sdp });
+                    const answerMsg = SignalingMessage.create('ANSWER', localPeerId, msg.SenderPeerId, answerPayload);
+                    ws.send(answerMsg);
+                    log(`-> Handled OFFER and sent ANSWER to ${msg.SenderPeerId}`);
+                    break;
+
+                case 'CANDIDATE':
+                    if (peerConnections.has(msg.SenderPeerId)) {
+                        const candidateData = JSON.parse(msg.Message);
+                        await peerConnections.get(msg.SenderPeerId).addIceCandidate(new RTCIceCandidate(candidateData));
+                        log(`-> Added ICE Candidate from ${msg.SenderPeerId}.`);
+                    }
+                    break;
+            }
+        } catch (error) {
+            log(`❌ Error handling SWRTC command "${msg.Type}": ${error}`);
+        }
+    }
+
+    function createPeerConnection(peerId) {
+        if (peerConnections.has(peerId)) return;
+        
+        log(`Creating PeerConnection for ${peerId}...`);
+        const pc = new RTCPeerConnection({ iceServers: [{ urls: stunServer }] });
+        peerConnections.set(peerId, pc);
+
+        pc.onicecandidate = (event) => {
+            if (event.candidate) {
+                const candidateMsg = SignalingMessage.create('CANDIDATE', localPeerId, peerId, JSON.stringify(event.candidate.toJSON()));
+                ws.send(candidateMsg);
+            }
+        };
+
+        pc.ontrack = (event) => {
+            log(`🎉 Track received from ${peerId}! Attaching to video element.`);
+            if (event.streams && event.streams[0]) {
+                remoteVideo.srcObject = event.streams[0];
+            }
+        };
+
+        pc.ondatachannel = (event) => {
+            log(`DataChannel received from ${peerId}.`);
+            const dc = event.channel;
+            dc.onopen = () => {
+                log(`✅ DataChannel OPEN with ${peerId}.`);
+                dataChannels.set(peerId, dc);
+                updateUiForConnection(true); // Re-check if button should be enabled
+            };
+            dc.onmessage = (ev) => {
+                log(`<- Received Data from ${peerId}: ${ev.data}`);
+                const data = JSON.parse(ev.data);
+                if (data.action === 'colorChanged') {
+                    const colorData = data.color;
+                    colorStatus.textContent = colorData.name;
+                    colorStatus.style.backgroundColor = colorData.hex;
+                    const brightness = (parseInt(colorData.hex.slice(1,3), 16) * 299 + parseInt(colorData.hex.slice(3,5), 16) * 587 + parseInt(colorData.hex.slice(5,7), 16) * 114) / 1000;
+                    colorStatus.style.color = brightness > 128 ? 'black' : 'white';
+                }
+            };
+            dc.onclose = () => {
+                log(`🔌 DataChannel CLOSED with ${peerId}.`);
+                dataChannels.delete(peerId);
+                updateUiForConnection(true);
+            };
+        };
+        
+        pc.onconnectionstatechange = () => log(`Connection state with ${peerId}: ${pc.connectionState}`);
+    }
+
+    function sendColorCommand() {
+        if (dataChannels.size === 0) {
+            log("Cannot send command: No open data channels.");
+            return;
+        }
+        
+        const color = colors[colorIndex];
+        colorIndex = (colorIndex + 1) % colors.length;
+
+        const commandPayload = JSON.stringify({
+            action: 'changeColor',
+            color: color
+        });
+
+        // Send to all open data channels
+        dataChannels.forEach((dc, peerId) => {
+            log(`-> Sending command to ${peerId}: changeColor to ${color.name}`);
+            dc.send(commandPayload);
+        });
+    }
+
+    // --- Event Listeners Setup ---
+    connectBtn.onclick = connectToServer;
+    disconnectBtn.onclick = () => { if (ws) ws.close(); };
+    changeColorBtn.onclick = sendColorCommand;
+
+    // --- Initial UI State ---
+    updateUiForConnection(false);
+
+</script>
+</body>
+</html>
