@@ -5,17 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Unity Command & Stream Console</title>
     <style>
-        :root { --main-bg: #f0f2f5; --panel-bg: #ffffff; --text-color: #333; --border-color: #d9d9d9; --accent-color: #007bff; }
+        :root { --main-bg: #f0f2f5; --panel-bg: #ffffff; --text-color: #333; --border-color: #d9d9d9; --accent-color: #007bff; --log-bg: #2b2b2b; --log-text: #f1f1f1; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 20px; background-color: var(--main-bg); color: var(--text-color); }
         h1, h3 { margin-top: 0; color: var(--text-color); }
         .main-container { display: flex; flex-wrap: wrap; gap: 20px; height: calc(100vh - 80px); }
         .video-container { flex: 3; min-width: 400px; background: #000; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; }
-        .video-wrapper { flex-grow: 1; display: flex; align-items: center; justify-content: center; background: #1a1a1a; }
+        .video-wrapper { flex-grow: 1; display: flex; align-items: center; justify-content: center; background: #1a1a1a; color: #555; }
         video { width: 100%; height: 100%; object-fit: contain; }
         .control-log-container { flex: 1; min-width: 300px; display: flex; flex-direction: column; gap: 20px; }
         .panel { background-color: var(--panel-bg); padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24); }
         .log-panel { flex-grow: 1; display: flex; flex-direction: column; }
-        #logBox { width: 100%; flex-grow: 1; box-sizing: border-box; resize: none; border: 1px solid var(--border-color); border-radius: 4px; padding: 10px; font-family: monospace; font-size: 12px; }
+        #logBox { width: 100%; flex-grow: 1; box-sizing: border-box; resize: none; border: 1px solid var(--border-color); border-radius: 4px; padding: 10px; font-family: monospace; font-size: 12px; background-color: var(--log-bg); color: var(--log-text); }
         button { font-size: 16px; padding: 10px 15px; border-radius: 5px; border: none; background-color: var(--accent-color); color: white; cursor: pointer; transition: background-color 0.2s; }
         button:hover { background-color: #0056b3; }
         button:disabled { background-color: #a0a0a0; cursor: not-allowed; }
@@ -40,7 +40,7 @@
     <div class="video-container panel">
         <h3>Live Stream from Unity</h3>
         <div class="video-wrapper">
-            <video id="remoteVideo" autoplay playsinline muted>Your browser does not support the video tag.</video>
+            <video id="remoteVideo" autoplay playsinline>Your browser does not support the video tag.</video>
         </div>
     </div>
 
@@ -59,40 +59,11 @@
 </div>
 
 <script type="module">
-    // This script now combines the logic from the example's main.js and webRTCManager.js
-    // and adapts it for our specific command console use case.
+    // --- CONFIGURATION ---
+    const MQTT_COMMAND_CHANNEL = "scene/control"; // Channel to send commands TO Unity
+    const MQTT_STATUS_CHANNEL = "scene/status";   // Channel to receive status FROM Unity
 
-    // --- WebRTCManager Class (from example, slightly adapted) ---
-    // Helper for signaling message types
-    const SignalingMessageType = { NEWPEER: "NEWPEER", NEWPEERACK: "NEWPEERACK", OFFER: "OFFER", ANSWER: "ANSWER", CANDIDATE: "CANDIDATE", DISPOSE: "DISPOSE", DATA: "DATA", COMPLETE: "COMPLETE" };
-    
-    // Helper to parse signaling messages
-    class SignalingMessage {
-        constructor(text) {
-            const parts = text.split("|");
-            this.Type = parts[0];
-            this.SenderPeerId = parts[1];
-            this.ReceiverPeerId = parts[2];
-
-            // The JSON message is always the 4th part (index 3).
-            // The rest are extra parameters we don't need to parse on the web client.
-            // This ensures we only try to parse the valid JSON portion.
-            this.Message = parts.length > 3 ? parts[3] : null; 
-        }
-        static create(type, sender, receiver, message) {
-            // This remains the same, as the web page doesn't need to send the extra fields.
-            return `${type}|${sender}|${receiver}|${message}|1|true`;
-        }
-    }
-
-    class WebRTCManager {
-        // ... (The full WebRTCManager.js code would go here, but for simplicity, 
-        // we'll integrate its core logic directly into our main script below)
-    }
-
-    // --- Main Application Logic ---
-
-    // UI Elements
+    // --- UI ELEMENTS ---
     const connectBtn = document.getElementById('connectBtn');
     const disconnectBtn = document.getElementById('disconnectBtn');
     const websocketUrlInput = document.getElementById('websocketUrl');
@@ -101,17 +72,28 @@
     const changeColorBtn = document.getElementById('changeColorBtn');
     const colorStatus = document.getElementById('colorStatus');
 
-    // State
+    // --- STATE ---
     let ws;
     let peerConnections = new Map(); // peerId -> RTCPeerConnection
     let dataChannels = new Map(); // peerId -> RTCDataChannel
     const localPeerId = `WebConsole-${Math.random().toString(36).substring(2, 8)}`;
     const stunServer = "stun:stun.l.google.com:19302";
-
     const colors = [{ name: "Red", hex: "#e74c3c" }, { name: "Green", hex: "#2ecc71" }, { name: "Blue", hex: "#3498db" }];
     let colorIndex = 0;
 
-    // --- Functions ---
+    // --- HELPER CLASSES AND FUNCTIONS ---
+    class SignalingMessage {
+        constructor(text) {
+            const parts = text.split("|");
+            this.Type = parts[0];
+            this.SenderPeerId = parts[1];
+            this.ReceiverPeerId = parts[2];
+            this.Message = parts.length > 3 ? parts[3] : null;
+        }
+        static create(type, sender, receiver, message) {
+            return `${type}|${sender}|${receiver}|${message}|1|true`;
+        }
+    }
 
     function log(message) {
         console.log(message);
@@ -131,12 +113,11 @@
         }
     }
 
+    // --- MAIN LOGIC ---
+
     function connectToServer() {
         const wsUrl = websocketUrlInput.value;
-        if (!wsUrl) {
-            alert("WebSocket URL is required.");
-            return;
-        }
+        if (!wsUrl) { alert("WebSocket URL is required."); return; }
         
         log(`Connecting to ${wsUrl}...`);
         ws = new WebSocket(wsUrl);
@@ -145,13 +126,19 @@
             log(`✅ Connected! Our Peer ID: ${localPeerId}`);
             updateUiForConnection(true);
             
-            // 1. Announce our presence for WebRTC streaming (as a receiver)
-            const newPeerMsg = `NEWPEER|${localPeerId}|ALL|Web Console Peer|1|true`;
+            // Subscribe to the MQTT status channel for color updates
+            const subscribeMsg = { command: 'subscribe', channel: MQTT_STATUS_CHANNEL };
+            ws.send(JSON.stringify(subscribeMsg));
+            log(`-> Sent JSON Subscribe for channel: ${MQTT_STATUS_CHANNEL}`);
+
+            // Announce our presence for WebRTC streaming
+            const newPeerMsg = SignalingMessage.create('NEWPEER', localPeerId, 'ALL', 'Web Console Peer');
             ws.send(newPeerMsg);
             log(`-> Sent SWRTC NEWPEER message.`);
         };
 
         ws.onmessage = (event) => {
+            // This is the core multiplexer: route message based on format
             if (event.data.startsWith('{')) {
                 handleMqttJsonMessage(JSON.parse(event.data));
             } else {
@@ -170,48 +157,61 @@
         };
     }
 
-    // This handles JSON messages from the server's MQTT bridge
     function handleMqttJsonMessage(data) {
         log(`<- Received JSON: ${JSON.stringify(data).substring(0, 150)}...`);
-        // This web page doesn't currently use MQTT messages, but the handler is here for future use.
+        // Handle status updates from Unity via MQTT
+        if (data.type === 'mqtt' && data.channel === MQTT_STATUS_CHANNEL) {
+            try {
+                const status = JSON.parse(data.message);
+                if (status.action === 'colorChanged') {
+                    const colorData = status.color;
+                    log(`🎨 Unity reported color changed to ${colorData.name}`);
+                    colorStatus.textContent = colorData.name;
+                    colorStatus.style.backgroundColor = colorData.hex;
+                    const brightness = (parseInt(colorData.hex.slice(1,3), 16)*299 + parseInt(colorData.hex.slice(3,5), 16)*587 + parseInt(colorData.hex.slice(5,7), 16)*114) / 1000;
+                    colorStatus.style.color = brightness > 128 ? 'black' : 'white';
+                }
+            } catch (e) {
+                log(`Could not parse MQTT message payload: ${data.message}`);
+            }
+        }
     }
-
-    // This handles the pipe-delimited SimpleWebRTC signaling messages
+    
     async function handleSimpleWebRTCMessage(msg) {
         log(`<- Received SWRTC: ${msg.Type} from ${msg.SenderPeerId}`);
+        if (!msg.SenderPeerId || msg.SenderPeerId === localPeerId) return;
+
+        if (!peerConnections.has(msg.SenderPeerId) && (msg.Type === 'OFFER' || msg.Type === 'NEWPEER')) {
+            createPeerConnection(msg.SenderPeerId);
+        }
+        
+        const pc = peerConnections.get(msg.SenderPeerId);
+        if (!pc) return;
 
         try {
             switch (msg.Type) {
                 case 'NEWPEER':
-                    // A new peer (likely Unity) has joined. Acknowledge them.
                     const ackMsg = SignalingMessage.create('NEWPEERACK', localPeerId, msg.SenderPeerId, "Web Console ACK");
                     ws.send(ackMsg);
                     log(`-> Sent NEWPEERACK to ${msg.SenderPeerId}`);
                     break;
-                
                 case 'OFFER':
-                    // We received an offer to connect from a peer (Unity).
-                    if (!peerConnections.has(msg.SenderPeerId)) {
-                        createPeerConnection(msg.SenderPeerId);
+                    if (pc.signalingState !== 'stable') {
+                        log(`Ignoring OFFER from ${msg.SenderPeerId}, state is '${pc.signalingState}'.`);
+                        return;
                     }
-                    const pc = peerConnections.get(msg.SenderPeerId);
                     const offer = JSON.parse(msg.Message);
                     await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: offer.sdp || offer.Sdp }));
                     const answer = await pc.createAnswer();
                     await pc.setLocalDescription(answer);
-
                     const answerPayload = JSON.stringify({ type: answer.type, sdp: answer.sdp });
                     const answerMsg = SignalingMessage.create('ANSWER', localPeerId, msg.SenderPeerId, answerPayload);
                     ws.send(answerMsg);
-                    log(`-> Handled OFFER and sent ANSWER to ${msg.SenderPeerId}`);
+                    log(`-> Handled OFFER and sent ANSWER to ${msg.SenderPeerId}.`);
                     break;
-
                 case 'CANDIDATE':
-                    if (peerConnections.has(msg.SenderPeerId)) {
-                        const candidateData = JSON.parse(msg.Message);
-                        await peerConnections.get(msg.SenderPeerId).addIceCandidate(new RTCIceCandidate(candidateData));
-                        log(`-> Added ICE Candidate from ${msg.SenderPeerId}.`);
-                    }
+                    const candidateData = JSON.parse(msg.Message);
+                    await pc.addIceCandidate(new RTCIceCandidate(candidateData));
                     break;
             }
         } catch (error) {
@@ -220,8 +220,6 @@
     }
 
     function createPeerConnection(peerId) {
-        if (peerConnections.has(peerId)) return;
-        
         log(`Creating PeerConnection for ${peerId}...`);
         const pc = new RTCPeerConnection({ iceServers: [{ urls: stunServer }] });
         peerConnections.set(peerId, pc);
@@ -234,31 +232,33 @@
         };
 
         pc.ontrack = (event) => {
-            log(`🎉 Track received from ${peerId}! Attaching to video element.`);
+            log(`Track received (kind: ${event.track.kind}, state: ${event.track.readyState}).`);
+
+            // This condition handles clients that send a track without a stream.
             if (event.streams && event.streams[0]) {
+                // Standard behavior: use the stream provided in the event.
                 remoteVideo.srcObject = event.streams[0];
+            } else {
+                // Fallback: create a new stream and add the track to it.
+                // This is the critical piece that makes it work with SimpleWebRTC.
+                const newStream = new MediaStream();
+                newStream.addTrack(event.track);
+                remoteVideo.srcObject = newStream;
             }
+            
+            // Attempt to play the video, catching any potential browser errors.
+            remoteVideo.play().catch(err => log(`Error playing video: ${err.message}`));
         };
 
         pc.ondatachannel = (event) => {
-            log(`DataChannel received from ${peerId}.`);
+            log(`DataChannel link received from ${peerId}.`);
             const dc = event.channel;
             dc.onopen = () => {
                 log(`✅ DataChannel OPEN with ${peerId}.`);
                 dataChannels.set(peerId, dc);
-                updateUiForConnection(true); // Re-check if button should be enabled
+                updateUiForConnection(true);
             };
-            dc.onmessage = (ev) => {
-                log(`<- Received Data from ${peerId}: ${ev.data}`);
-                const data = JSON.parse(ev.data);
-                if (data.action === 'colorChanged') {
-                    const colorData = data.color;
-                    colorStatus.textContent = colorData.name;
-                    colorStatus.style.backgroundColor = colorData.hex;
-                    const brightness = (parseInt(colorData.hex.slice(1,3), 16) * 299 + parseInt(colorData.hex.slice(3,5), 16) * 587 + parseInt(colorData.hex.slice(5,7), 16) * 114) / 1000;
-                    colorStatus.style.color = brightness > 128 ? 'black' : 'white';
-                }
-            };
+            dc.onmessage = (ev) => { log(`<- Data from ${peerId}: ${ev.data}`); };
             dc.onclose = () => {
                 log(`🔌 DataChannel CLOSED with ${peerId}.`);
                 dataChannels.delete(peerId);
@@ -266,28 +266,31 @@
             };
         };
         
-        pc.onconnectionstatechange = () => log(`Connection state with ${peerId}: ${pc.connectionState}`);
+        pc.onconnectionstatechange = () => {
+            // You can keep this for minimal connection status logging
+            log(`Connection state with ${peerId}: ${pc.connectionState}`);
+        };
     }
 
     function sendColorCommand() {
-        if (dataChannels.size === 0) {
-            log("Cannot send command: No open data channels.");
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+            log("Cannot send command: WebSocket is not open.");
             return;
         }
         
         const color = colors[colorIndex];
         colorIndex = (colorIndex + 1) % colors.length;
 
-        const commandPayload = JSON.stringify({
-            action: 'changeColor',
-            color: color
-        });
+        // This command is sent using the JSON/MQTT bridge protocol
+        const commandPayload = { action: 'changeColor', color: color };
+        const publishMsg = {
+            command: 'publish',
+            channel: MQTT_COMMAND_CHANNEL,
+            message: JSON.stringify(commandPayload) // Stringify the inner message object
+        };
 
-        // Send to all open data channels
-        dataChannels.forEach((dc, peerId) => {
-            log(`-> Sending command to ${peerId}: changeColor to ${color.name}`);
-            dc.send(commandPayload);
-        });
+        ws.send(JSON.stringify(publishMsg));
+        log(`-> Sent command to change color to ${color.name}`);
     }
 
     // --- Event Listeners Setup ---
